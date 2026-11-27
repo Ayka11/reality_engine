@@ -570,8 +570,8 @@ export class InfinityScaleLODState {
       state: InfinityScaleLODChunkState;
       offset: number;
       values: Float32Array;
+      previous: Float32Array;
     }> = [];
-    const backups = new Map<string, Float32Array>();
 
     // Preflight the entire batch without mutating authoritative state.
     for (let index = 0; index < updates.length; index++) {
@@ -603,8 +603,14 @@ export class InfinityScaleLODState {
         update.values, CELL_FIELDS, "Infinity Scale physical cell batch " + identity,
       );
       const offset = update.cellIndex * CELL_FIELDS;
-      prepared.push({ state, offset, values });
-      if (!backups.has(update.chunkKey)) backups.set(update.chunkKey, new Float32Array(state.cells));
+      prepared.push({
+        state,
+        offset,
+        values,
+        // Only the target cell is backed up. Snapshotting an entire 32^3 chunk
+        // for every touched chunk would make sparse batches needlessly huge.
+        previous: state.cells.slice(offset, offset + CELL_FIELDS),
+      });
     }
 
     // Revision is checked again immediately before publication. JavaScript
@@ -615,9 +621,18 @@ export class InfinityScaleLODState {
         update.state.cells.set(update.values, update.offset);
       }
     } catch (error) {
-      for (const [key, snapshot] of backups) {
-        const state = this.states.get(key);
-        if (state) state.cells.set(snapshot);
+      try {
+        // Restore every target in reverse publication order, including the
+        // cell whose native typed-array write may have partially completed.
+        for (let index = prepared.length - 1; index >= 0; index--) {
+          const update = prepared[index];
+          update.state.cells.set(update.previous, update.offset);
+        }
+      } catch (rollbackError) {
+        throw new Error(
+          "Infinity Scale physical cell batch publication failed (" + String(error) +
+          "); cell-level rollback also failed (" + String(rollbackError) + ")",
+        );
       }
       throw new Error("Infinity Scale physical cell batch publication failed and was rolled back: " + String(error));
     }
