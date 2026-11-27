@@ -242,9 +242,17 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     expectRejected("legacy __defineSetter__ mutator shadow", () =>
       collection.__defineSetter__(candidate.mutator, () => undefined));
     expectRejected("native Object.prototype.__defineGetter__ mutator shadow", () =>
-      Object.prototype.__defineGetter__.call(collection, candidate.mutator, () => () => collection));
+      Reflect.apply(
+        Reflect.get(Object.prototype, "__defineGetter__") as (...args: unknown[]) => unknown,
+        collection,
+        [candidate.mutator, () => () => collection],
+      ));
     expectRejected("native Object.prototype.__defineSetter__ mutator shadow", () =>
-      Object.prototype.__defineSetter__.call(collection, candidate.mutator, () => undefined));
+      Reflect.apply(
+        Reflect.get(Object.prototype, "__defineSetter__") as (...args: unknown[]) => unknown,
+        collection,
+        [candidate.mutator, () => undefined],
+      ));
     if (Object.getOwnPropertyDescriptor(collection, candidate.mutator) !== undefined ||
         Object.getPrototypeOf(collection) !== candidate.prototype) {
       throw new Error("Legacy property definition changed a tracked collection");
