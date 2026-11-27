@@ -38,6 +38,7 @@ const NATIVE_SET_FOR_EACH = Set.prototype.forEach as Function;
 const NATIVE_SET_ITERATOR = Set.prototype[Symbol.iterator] as Function;
 const NATIVE_SET_SIZE_GETTER = Object.getOwnPropertyDescriptor(Set.prototype, "size")?.get as Function;
 
+const NATIVE_REFLECT_GET_PROTOTYPE_OF = Reflect.getPrototypeOf;
 const NATIVE_OBJECT_TO_STRING = Object.prototype.toString as Function;
 const NATIVE_OBJECT_TO_LOCALE_STRING = Object.prototype.toLocaleString as Function;
 const NATIVE_OBJECT_HAS_OWN_PROPERTY = Object.prototype.hasOwnProperty as Function;
@@ -1423,6 +1424,10 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         }
         return ownDescriptor.value;
       }
+
+      // Do not invoke a mutable Object.prototype.__proto__ getter with the raw
+      // target as receiver. Return the actual collection prototype directly.
+      if (property === "__proto__") return NATIVE_REFLECT_GET_PROTOTYPE_OF(target);
 
       if (property === "size") {
         const getter = isMap ? NATIVE_MAP_SIZE_GETTER : NATIVE_SET_SIZE_GETTER;
