@@ -1,6 +1,5 @@
 import { CELL_FIELDS, F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
-import { F } from "../core/CellState";
 import { stageDenseWindowPhysicalReductions } from "./InfinityScaleDenseWindowReduction";
 import { commitDenseWindowPhysicalReductions } from "./InfinityScaleDenseWindowCommit";
 
