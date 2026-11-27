@@ -266,6 +266,7 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     const collection = candidate.collection as unknown as Map<string, unknown> & {
       __receiverProbe__?: () => unknown;
       __getterReceiverProbe__?: unknown;
+      __setterReceiverProbe__?: unknown;
     };
     Object.defineProperty(collection, "__receiverProbe__", {
       configurable: true,
@@ -297,8 +298,23 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
         ? Set.prototype.add.call(getterReceiver, "proxy-own-getter-bypass")
         : Map.prototype.set.call(getterReceiver, "proxy-own-getter-bypass", "bypass"));
 
+    let setterReceiver: unknown;
+    Object.defineProperty(collection, "__setterReceiverProbe__", {
+      configurable: true,
+      set: function (this: unknown, _value: unknown) { setterReceiver = this; },
+    });
+    if (!Reflect.set(collection, "__setterReceiverProbe__", "trigger") ||
+        setterReceiver !== collection) {
+      throw new Error("Own collection setter received or exposed the raw target");
+    }
+    expectRejected("native mutator bypass through own setter receiver", () =>
+      candidate.mutator === "add"
+        ? Set.prototype.add.call(setterReceiver, "proxy-own-setter-bypass")
+        : Map.prototype.set.call(setterReceiver, "proxy-own-setter-bypass", "bypass"));
+
     delete (collection as unknown as Record<string, unknown>).__receiverProbe__;
     delete (collection as unknown as Record<string, unknown>).__getterReceiverProbe__;
+    delete (collection as unknown as Record<string, unknown>).__setterReceiverProbe__;
   }
 
   // Chainable tracked mutators must return the public proxy, not their
