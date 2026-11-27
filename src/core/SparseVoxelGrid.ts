@@ -1343,11 +1343,10 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
     get(target, property) {
       const value = Reflect.get(target, property, target) as unknown;
       if (typeof value !== "function" || property === "constructor") return value;
-      let bound = boundMethods.get(property);
-      if (!bound) {
-        bound = value.bind(target);
-        boundMethods.set(property, bound);
-      }
+      const cached = boundMethods.get(property);
+      if (cached) return cached;
+      const bound = value.bind(target) as Function;
+      boundMethods.set(property, bound);
       return bound;
     },
   });
