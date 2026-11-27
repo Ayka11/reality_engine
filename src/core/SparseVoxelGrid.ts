@@ -1344,6 +1344,16 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
     get(target, property) {
       const value = Reflect.get(target, property, target) as unknown;
       if (typeof value !== "function" || property === "constructor") return value;
+      // Object.prototype.valueOf would otherwise be bound to the raw target by
+      // the generic method binding below, leaking the underlying collection.
+      // Keep identity-style access on the public proxy.
+      if (property === "valueOf") {
+        const cached = boundMethods.get(property);
+        if (cached) return cached;
+        const guardedValueOf = () => proxy;
+        boundMethods.set(property, guardedValueOf);
+        return guardedValueOf;
+      }
       // Map/Set forEach passes its receiver as the callback's third argument.
       // The method must execute against the real target to satisfy native
       // collection internal-slot checks, but must never expose that target to
