@@ -1058,6 +1058,12 @@ function assertRollbackAggregate(
   engine.laws.setLawOverride('law_radiation', 'on');
   const configuredLawState = engine.laws.snapshot();
 
+  // A reset is a world boundary: old sparse residency and worker ownership
+  // metadata must not leak into the next generated world.
+  engine.grid.getOrCreateChunk(5, 0, 0);
+  engine.grid.assignChunkOwner("5,0,0", "old-world-worker");
+  engine.grid.markChunksDirty(["5,0,0", "99,0,0"]);
+
   const generationBeforeReset = (engine as unknown as { _stateGeneration: number })._stateGeneration;
   engine.reset();
 
@@ -1067,6 +1073,10 @@ function assertRollbackAggregate(
   assert.equal(engine.grid.buffer[energyIndex], 0, 'reset must clear dense authoritative fields');
   assert.equal(engine.grid.backBuffer[energyIndex], 0, 'reset must align the back buffer with the cleared front buffer');
   assert.equal(engine.grid.getCell(1, 1, 1)?.energy, 0, 'reset must publish cleared fields to sparse chunks');
+  assert.equal(engine.grid.chunks.has("5,0,0"), false, 'reset must remove old-world resident chunks');
+  assert.equal(engine.grid.chunkOwners.size, 0, 'reset must remove old-world chunk ownership assignments');
+  assert.deepEqual(engine.grid.getOwnedChunks(), [], 'reset must expose no owners from the previous world');
+  assert.equal(engine.grid.dirtyChunks.size, 0, 'reset must clear old-world dirty chunk metadata');
   assert.deepEqual(engine.snapshotChemistryState(), { pendingDensityTransfers: [] },
     'reset must discard deferred chemistry transfers from the previous world');
   assert.deepEqual(engine.worldEvents.snapshot(), {
