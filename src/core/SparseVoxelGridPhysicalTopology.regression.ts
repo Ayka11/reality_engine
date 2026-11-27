@@ -333,6 +333,96 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     delete (collection as unknown as Record<string, unknown>).__setterReceiverProbe__;
   }
 
+  // Captured native intrinsics must remain authoritative even if another
+  // script replaces Map/Set prototype methods or accessors at runtime.
+  const nativeChunk = grid.chunks.get("0,0,0");
+  if (!nativeChunk) throw new Error("Native intrinsic regression requires a seeded chunk");
+
+  const mapGetDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "get");
+  const mapEntriesDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "entries");
+  const mapForEachDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "forEach");
+  const mapSizeDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "size");
+  const mapIteratorDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, Symbol.iterator);
+  try {
+    Object.defineProperty(Map.prototype, "get", {
+      ...mapGetDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "entries", {
+      ...mapEntriesDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "forEach", {
+      ...mapForEachDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "size", {
+      ...mapSizeDescriptor,
+      get: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, Symbol.iterator, {
+      ...mapIteratorDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    if (grid.chunks.get("0,0,0") !== nativeChunk ||
+        typeof grid.chunks.size !== "number" ||
+        typeof grid.chunks.entries().next !== "function" ||
+        typeof grid.chunks[Symbol.iterator]().next !== "function") {
+      throw new Error("Tracked Map Proxy used a replaced native Map prototype intrinsic");
+    }
+    let mapForEachCount = 0;
+    const mapForEachResult = grid.chunks.forEach(() => { mapForEachCount++; });
+    if (mapForEachResult !== undefined || mapForEachCount !== grid.chunks.size) {
+      throw new Error("Tracked Map Proxy exposed its target through a replaced forEach intrinsic");
+    }
+  } finally {
+    if (mapGetDescriptor) Object.defineProperty(Map.prototype, "get", mapGetDescriptor);
+    if (mapEntriesDescriptor) Object.defineProperty(Map.prototype, "entries", mapEntriesDescriptor);
+    if (mapForEachDescriptor) Object.defineProperty(Map.prototype, "forEach", mapForEachDescriptor);
+    if (mapSizeDescriptor) Object.defineProperty(Map.prototype, "size", mapSizeDescriptor);
+    if (mapIteratorDescriptor) Object.defineProperty(Map.prototype, Symbol.iterator, mapIteratorDescriptor);
+  }
+
+  grid.dirtyChunks.add("0,0,0");
+  const setValuesDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "values");
+  const setForEachDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "forEach");
+  const setSizeDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "size");
+  const setIteratorDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, Symbol.iterator);
+  try {
+    Object.defineProperty(Set.prototype, "values", {
+      ...setValuesDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "forEach", {
+      ...setForEachDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "size", {
+      ...setSizeDescriptor,
+      get: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, Symbol.iterator, {
+      ...setIteratorDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    if (typeof grid.dirtyChunks.size !== "number" ||
+        typeof grid.dirtyChunks.values().next !== "function" ||
+        typeof grid.dirtyChunks[Symbol.iterator]().next !== "function") {
+      throw new Error("Tracked Set Proxy used a replaced native Set prototype intrinsic");
+    }
+    let setForEachCount = 0;
+    const setForEachResult = grid.dirtyChunks.forEach(() => { setForEachCount++; });
+    if (setForEachResult !== undefined || setForEachCount !== grid.dirtyChunks.size) {
+      throw new Error("Tracked Set Proxy exposed its target through a replaced forEach intrinsic");
+    }
+  } finally {
+    if (setValuesDescriptor) Object.defineProperty(Set.prototype, "values", setValuesDescriptor);
+    if (setForEachDescriptor) Object.defineProperty(Set.prototype, "forEach", setForEachDescriptor);
+    if (setSizeDescriptor) Object.defineProperty(Set.prototype, "size", setSizeDescriptor);
+    if (setIteratorDescriptor) Object.defineProperty(Set.prototype, Symbol.iterator, setIteratorDescriptor);
+  }
+  grid.dirtyChunks.clear();
+
   // Chainable tracked mutators must return the public proxy, not their
   // bound raw target. Otherwise fluent Map.set / Set.add calls leak it.
   const existingChunk = grid.chunks.get("0,0,0");
