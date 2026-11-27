@@ -508,7 +508,9 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   const objectToStringDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "toString");
   const objectToLocaleStringDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "toLocaleString");
   const objectHasOwnPropertyDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "hasOwnProperty");
-  if (!objectToStringDescriptor || !objectToLocaleStringDescriptor || !objectHasOwnPropertyDescriptor) {
+  const objectProtoDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "__proto__");
+  if (!objectToStringDescriptor || !objectToLocaleStringDescriptor ||
+      !objectHasOwnPropertyDescriptor || !objectProtoDescriptor) {
     throw new Error("Native Object prototype descriptors are unavailable for the tampering regression");
   }
   try {
@@ -524,18 +526,25 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       ...objectHasOwnPropertyDescriptor,
       value: function (this: unknown) { return this; },
     });
+    Object.defineProperty(Object.prototype, "__proto__", {
+      ...objectProtoDescriptor,
+      get: function (this: unknown) { return this; },
+    });
     if (typeof grid.chunks.toString() !== "string" ||
         typeof grid.chunks.toLocaleString() !== "string" ||
         typeof grid.chunks.hasOwnProperty("missing") !== "boolean" ||
         typeof grid.dirtyChunks.toString() !== "string" ||
         typeof grid.dirtyChunks.toLocaleString() !== "string" ||
-        typeof grid.dirtyChunks.hasOwnProperty("missing") !== "boolean") {
+        typeof grid.dirtyChunks.hasOwnProperty("missing") !== "boolean" ||
+        grid.chunks.__proto__ !== Object.getPrototypeOf(grid.chunks) ||
+        grid.dirtyChunks.__proto__ !== Object.getPrototypeOf(grid.dirtyChunks)) {
       throw new Error("Tracked collection Proxy exposed its raw target through a replaced Object prototype helper");
     }
   } finally {
     Object.defineProperty(Object.prototype, "toString", objectToStringDescriptor);
     Object.defineProperty(Object.prototype, "toLocaleString", objectToLocaleStringDescriptor);
     Object.defineProperty(Object.prototype, "hasOwnProperty", objectHasOwnPropertyDescriptor);
+    Object.defineProperty(Object.prototype, "__proto__", objectProtoDescriptor);
   }
 
   // Chainable tracked mutators must return the public proxy, not their
