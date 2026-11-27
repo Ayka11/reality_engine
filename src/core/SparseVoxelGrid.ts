@@ -1378,7 +1378,9 @@ export { CHUNK_SIZE, CHUNK_VOLUME };
  * Map/Set methods require their internal slots on the receiver.
  */
 function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(collection: T): T {
-  const boundMethods = new Map<PropertyKey, Function>();
+  // Use a null-prototype record: the cache itself must not depend on mutable
+  // Map.prototype methods while defending against global Map prototype tampering.
+  const boundMethods = Object.create(null) as Record<PropertyKey, Function>;
   let proxy: T;
   proxy = new Proxy(collection, {
     get(target, property) {
@@ -1400,17 +1402,17 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
       }
 
       if (property === "valueOf") {
-        const cached = boundMethods.get(property);
+        const cached = boundMethods[property];
         if (cached) return cached;
         const guardedValueOf = () => proxy;
-        boundMethods.set(property, guardedValueOf);
+        boundMethods[property] = guardedValueOf;
         return guardedValueOf;
       }
 
       // Legacy Object.prototype definition helpers must operate through the
       // public Proxy, never against the raw collection target.
       if (property === "__defineGetter__" || property === "__defineSetter__") {
-        const cached = boundMethods.get(property);
+        const cached = boundMethods[property];
         if (cached) return cached;
         const guardedLegacyDefine = (key: PropertyKey, callback: unknown): void => {
           if (typeof callback !== "function") {
@@ -1423,7 +1425,7 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
             throw new TypeError("Tracked collection property definition was rejected");
           }
         };
-        boundMethods.set(property, guardedLegacyDefine);
+        boundMethods[property] = guardedLegacyDefine;
         return guardedLegacyDefine;
       }
 
@@ -1432,13 +1434,13 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
       if (property === "set" || property === "add") {
         const value = Reflect.get(target, property, target) as unknown;
         if (typeof value !== "function") return value;
-        const cached = boundMethods.get(property);
+        const cached = boundMethods[property];
         if (cached) return cached;
         const guardedMutator = (...args: unknown[]) => {
           const result = Reflect.apply(value, target, args);
           return result === target ? proxy : result;
         };
-        boundMethods.set(property, guardedMutator);
+        boundMethods[property] = guardedMutator;
         return guardedMutator;
       }
 
@@ -1446,7 +1448,7 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
       // replaced Map.prototype / Set.prototype method. Never expose target as
       // the callback's third argument.
       if (property === "forEach") {
-        const cached = boundMethods.get(property);
+        const cached = boundMethods[property];
         if (cached) return cached;
         const nativeForEach = isMap ? NATIVE_MAP_FOR_EACH : NATIVE_SET_FOR_EACH;
         const guardedForEach = (callback: unknown, thisArg?: unknown) => {
@@ -1461,7 +1463,7 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
             thisArg,
           ]);
         };
-        boundMethods.set(property, guardedForEach);
+        boundMethods[property] = guardedForEach;
         return guardedForEach;
       }
 
@@ -1470,19 +1472,19 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
       // the raw target or run arbitrary replacement code with target as this.
       const nativeMethod = getNativeCollectionMethod(isMap, property);
       if (nativeMethod) {
-        const cached = boundMethods.get(property);
+        const cached = boundMethods[property];
         if (cached) return cached;
         const bound = nativeMethod.bind(target) as Function;
-        boundMethods.set(property, bound);
+        boundMethods[property] = bound;
         return bound;
       }
 
       const value = Reflect.get(target, property, target) as unknown;
       if (typeof value !== "function" || property === "constructor") return value;
-      const cached = boundMethods.get(property);
+      const cached = boundMethods[property];
       if (cached) return cached;
       const bound = value.bind(target) as Function;
-      boundMethods.set(property, bound);
+      boundMethods[property] = bound;
       return bound;
     },
     // Changing the target prototype would replace the tracked subclass
