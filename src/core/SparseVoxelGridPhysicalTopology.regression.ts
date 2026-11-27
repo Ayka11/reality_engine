@@ -503,6 +503,41 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   }
   grid.dirtyChunks.clear();
 
+  // Object.prototype helpers are inherited by Map/Set too. A polluted
+  // helper bound to the raw target would otherwise become another receiver leak.
+  const objectToStringDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "toString");
+  const objectToLocaleStringDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "toLocaleString");
+  const objectHasOwnPropertyDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "hasOwnProperty");
+  if (!objectToStringDescriptor || !objectToLocaleStringDescriptor || !objectHasOwnPropertyDescriptor) {
+    throw new Error("Native Object prototype descriptors are unavailable for the tampering regression");
+  }
+  try {
+    Object.defineProperty(Object.prototype, "toString", {
+      ...objectToStringDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Object.prototype, "toLocaleString", {
+      ...objectToLocaleStringDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Object.prototype, "hasOwnProperty", {
+      ...objectHasOwnPropertyDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    if (typeof grid.chunks.toString() !== "string" ||
+        typeof grid.chunks.toLocaleString() !== "string" ||
+        typeof grid.chunks.hasOwnProperty("missing") !== "boolean" ||
+        typeof grid.dirtyChunks.toString() !== "string" ||
+        typeof grid.dirtyChunks.toLocaleString() !== "string" ||
+        typeof grid.dirtyChunks.hasOwnProperty("missing") !== "boolean") {
+      throw new Error("Tracked collection Proxy exposed its raw target through a replaced Object prototype helper");
+    }
+  } finally {
+    Object.defineProperty(Object.prototype, "toString", objectToStringDescriptor);
+    Object.defineProperty(Object.prototype, "toLocaleString", objectToLocaleStringDescriptor);
+    Object.defineProperty(Object.prototype, "hasOwnProperty", objectHasOwnPropertyDescriptor);
+  }
+
   // Chainable tracked mutators must return the public proxy, not their
   // bound raw target. Otherwise fluent Map.set / Set.add calls leak it.
   const existingChunk = grid.chunks.get("0,0,0");
