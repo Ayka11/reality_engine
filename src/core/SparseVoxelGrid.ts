@@ -1342,6 +1342,23 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
   let proxy: T;
   proxy = new Proxy(collection, {
     get(target, property) {
+      // Own properties are part of the public Proxy surface, not privileged
+      // methods of the raw Map/Set target. In particular, running an own getter
+      // with `target` as receiver or binding an own function to `target`
+      // leaks the native collection and permits prototype-mutator bypasses.
+      // Preserve ordinary JavaScript receiver semantics for every own property.
+      const ownDescriptor = Reflect.getOwnPropertyDescriptor(target, property);
+      if (ownDescriptor) {
+        if ("get" in ownDescriptor || "set" in ownDescriptor) {
+          if (!ownDescriptor.get) return undefined;
+          return Reflect.apply(ownDescriptor.get, proxy, []);
+        }
+        // Returning the exact value also preserves Proxy invariants for
+        // non-configurable, non-writable own properties. A method call written
+        // as proxy.method() receives the public Proxy as its this value.
+        return ownDescriptor.value;
+      }
+
       const value = Reflect.get(target, property, target) as unknown;
       if (typeof value !== "function" || property === "constructor") return value;
       // Object.prototype.valueOf would otherwise be bound to the raw target by
