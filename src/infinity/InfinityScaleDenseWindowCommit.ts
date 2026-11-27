@@ -20,7 +20,11 @@ export function commitDenseWindowPhysicalReductions(
   return state.writePhysicalCellBatchForTransaction(
     expectedStateRevision,
     staged.map(result => ({
-      chunkKey: result.chunkKey,
+      // SparseVoxelGrid physical addressing preserves the legacy level-zero
+      // key format "cx,cy,cz"; InfinityScaleLODState uses explicit "0:cx,cy,cz".
+      chunkKey: result.level === 0 && !result.chunkKey.startsWith("0:")
+        ? "0:" + result.chunkKey
+        : result.chunkKey,
       cellIndex: result.cellIndex,
       level: result.level,
       values: result.values,
