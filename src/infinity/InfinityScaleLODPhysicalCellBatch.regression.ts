@@ -83,6 +83,44 @@ export function runInfinityScaleLODPhysicalCellBatchRegression(): void {
     ]),
   "revision mismatch");
 
+  // Inject a failure after the first target write to exercise actual rollback,
+  // not merely preflight rejection. The prototype is restored in all cases.
+  const rollbackRevision = state.getRevision();
+  const rollbackBefore = state.snapshot();
+  const originalTypedArraySet = Float32Array.prototype.set;
+  let setCalls = 0;
+  Object.defineProperty(Float32Array.prototype, "set", {
+    configurable: true,
+    writable: true,
+    value: function(source: ArrayLike<number>, offset?: number): void {
+      setCalls += 1;
+      if (setCalls === 2) throw new Error("injected physical batch publication failure");
+      Reflect.apply(originalTypedArraySet, this, [source, offset]);
+    },
+  });
+  let injectedFailure: unknown;
+  try {
+    state.writePhysicalCellBatchForTransaction(rollbackRevision, [
+      { chunkKey: "0:0,0,0", cellIndex: 4, level: 0, values: validCandidate },
+      { chunkKey: "0:0,0,0", cellIndex: 5, level: 0, values: validCandidate },
+    ]);
+  } catch (error) {
+    injectedFailure = error;
+  } finally {
+    Object.defineProperty(Float32Array.prototype, "set", {
+      configurable: true,
+      writable: true,
+      value: originalTypedArraySet,
+    });
+  }
+  const rollbackAfter = state.snapshot();
+  if (!(injectedFailure instanceof Error) ||
+      !injectedFailure.message.includes("rolled back") ||
+      state.getRevision() !== rollbackRevision ||
+      rollbackAfter.chunks[0].cells.some((value, index) => value !== rollbackBefore.chunks[0].cells[index])) {
+    throw new Error("Injected physical cell batch publication failure did not restore all authoritative bytes and revision");
+  }
+
   const emptyRevision = state.writePhysicalCellBatchForTransaction(revisionBeforeRejectedBatch, []);
   if (emptyRevision !== revisionBeforeRejectedBatch || state.getRevision() !== revisionBeforeRejectedBatch) {
     throw new Error("Empty physical cell batch unexpectedly changed state revision");
