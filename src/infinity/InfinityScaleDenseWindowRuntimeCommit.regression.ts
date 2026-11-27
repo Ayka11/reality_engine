@@ -53,11 +53,12 @@ export function runInfinityScaleDenseWindowRuntimeCommitRegression(): void {
   const partialState = new InfinityScaleLODState(32);
   partialState.ensureChunk("1:0,0,0", 1);
   const partialBefore = partialState.getRevision();
+  const partialDense = new Float32Array(CELL_FIELDS);
   rejected("partial physical coverage", () =>
     commitDenseWindowFromPhysicalAdapter(
       adapter,
       { width: 1, height: 1, depth: 1, origin: { x: 2, y: 4, z: 6 } },
-      dense,
+      partialDense,
       partialState,
       partialBefore,
     ),
