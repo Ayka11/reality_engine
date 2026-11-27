@@ -221,6 +221,36 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     }
   }
 
+  // Legacy Object.prototype helpers and the inherited __proto__ setter
+  // must not bypass the public Proxy's mutation and descriptor guards.
+  const legacyEscapeCases = [
+    { collection: grid.chunks, mutator: "set", prototype: chunksPrototype },
+    { collection: grid.chunkOwners, mutator: "set", prototype: ownersPrototype },
+    { collection: grid.dirtyChunks, mutator: "add", prototype: dirtyPrototype },
+  ] as const;
+  for (const candidate of legacyEscapeCases) {
+    const collection = candidate.collection as unknown as object & {
+      __defineGetter__(key: PropertyKey, getter: () => unknown): void;
+      __defineSetter__(key: PropertyKey, setter: (value: unknown) => void): void;
+    };
+    if (Reflect.set(collection, "__proto__", Object.prototype) ||
+        Object.getPrototypeOf(collection) !== candidate.prototype) {
+      throw new Error("Tracked collection allowed __proto__ replacement");
+    }
+    expectRejected("legacy __defineGetter__ mutator shadow", () =>
+      collection.__defineGetter__(candidate.mutator, () => () => collection));
+    expectRejected("legacy __defineSetter__ mutator shadow", () =>
+      collection.__defineSetter__(candidate.mutator, () => undefined));
+    expectRejected("native Object.prototype.__defineGetter__ mutator shadow", () =>
+      Object.prototype.__defineGetter__.call(collection, candidate.mutator, () => () => collection));
+    expectRejected("native Object.prototype.__defineSetter__ mutator shadow", () =>
+      Object.prototype.__defineSetter__.call(collection, candidate.mutator, () => undefined));
+    if (Object.getOwnPropertyDescriptor(collection, candidate.mutator) !== undefined ||
+        Object.getPrototypeOf(collection) !== candidate.prototype) {
+      throw new Error("Legacy property definition changed a tracked collection");
+    }
+  }
+
   // Chainable tracked mutators must return the public proxy, not their
   // bound raw target. Otherwise fluent Map.set / Set.add calls leak it.
   const existingChunk = grid.chunks.get("0,0,0");
