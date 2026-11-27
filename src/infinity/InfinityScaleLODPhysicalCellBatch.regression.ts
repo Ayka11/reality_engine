@@ -1,5 +1,8 @@
 import { CELL_FIELDS, F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { F } from "../core/CellState";
+import { stageDenseWindowPhysicalReductions } from "./InfinityScaleDenseWindowReduction";
+import { commitDenseWindowPhysicalReductions } from "./InfinityScaleDenseWindowCommit";
 
 function expectRejected(label: string, operation: () => unknown, fragment: string): void {
   let failure: unknown;
@@ -90,6 +93,33 @@ export function runInfinityScaleLODPhysicalCellBatchRegression(): void {
   if (beforeRejectedBatch.chunks[0].cells[0] !== 11 ||
       beforeRejectedBatch.chunks[0].cells[7 * CELL_FIELDS + F.ENERGY] !== 22) {
     throw new Error("Physical cell batch mutated a previously captured state snapshot");
+  }
+
+  // End-to-end staged reduction -> revision-bound physical publication.
+  const coarseState = new InfinityScaleLODState(2);
+  coarseState.ensureChunk("1:0,0,0", 1);
+  const dense = new Float32Array(8 * CELL_FIELDS);
+  for (let index = 0; index < 8; index++) {
+    dense[index * CELL_FIELDS + F.ENERGY] = index + 1;
+    dense[index * CELL_FIELDS + F.DENSITY] = 10 + index;
+  }
+  const coverage = {
+    width: 2, height: 2, depth: 2, revision: 5,
+    complete: true, incompleteCellCount: 0,
+    cells: [{
+      chunkKey: "1:0,0,0", cellIndex: 0, level: 1,
+      expectedBaseSamples: 8, observedBaseSamples: 8,
+      denseIndices: [0, 1, 2, 3, 4, 5, 6, 7], complete: true,
+    }],
+  };
+  const staged = stageDenseWindowPhysicalReductions(dense, coverage, 5);
+  const beforePublish = coarseState.getRevision();
+  const afterPublish = commitDenseWindowPhysicalReductions(coarseState, beforePublish, staged);
+  const coarseChunk = coarseState.cloneChunk("1:0,0,0");
+  if (!coarseChunk || afterPublish !== beforePublish + 1 ||
+      coarseChunk.cells[F.ENERGY] !== 36 ||
+      coarseChunk.cells[F.DENSITY] !== 13.5) {
+    throw new Error("Staged dense-window reduction was not atomically published to the physical LOD cell");
   }
 
   console.log("Infinity Scale physical cell batch atomic preflight, complete-vector publication, revision ownership, duplicate target and rollback-safe rejection regressions: PASS");
