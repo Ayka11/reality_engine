@@ -179,13 +179,6 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   expectRejected("native Map.prototype.set bypass through chunks.forEach receiver", () =>
     grid.chunks.forEach((_chunk, _key, collection) =>
       Map.prototype.set.call(collection, "1,0,0", new Chunk(1, 0, 0))));
-  expectRejected("native Map.prototype.set bypass through chunkOwners.forEach receiver", () =>
-    grid.chunkOwners.forEach((_owner, _key, collection) =>
-      Map.prototype.set.call(collection, "0,0,0", "bypass")));
-  expectRejected("native Set.prototype.add bypass through dirtyChunks.forEach receiver", () =>
-    grid.dirtyChunks.forEach((_key, _sameKey, collection) =>
-      Set.prototype.add.call(collection, "1,0,0")));
-
   if (!(grid.chunks instanceof Map) || !(grid.chunkOwners instanceof Map) ||
       !(grid.dirtyChunks instanceof Set) ||
       grid.chunks.size !== 1 || !grid.chunks.has("0,0,0") ||
@@ -196,6 +189,25 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       grid.mutationRevision !== guardedRevision || grid.physicalTopology !== guardedTopology) {
     throw new Error("Native Map/Set prototype bypass changed tracked collection state or revision");
   }
+
+  // Seed each collection so forEach actually invokes its callback. Verify that
+  // the third callback argument is the public proxy, not the raw target.
+  grid.chunkOwners.set("0,0,0", "owner");
+  grid.dirtyChunks.add("0,0,0");
+  const forEachRevision = grid.mutationRevision;
+  expectRejected("native Map.prototype.set bypass through chunkOwners.forEach receiver", () =>
+    grid.chunkOwners.forEach((_owner, _key, collection) =>
+      Map.prototype.set.call(collection, "0,0,0", "bypass")));
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.forEach receiver", () =>
+    grid.dirtyChunks.forEach((_key, _sameKey, collection) =>
+      Set.prototype.add.call(collection, "1,0,0")));
+  if (grid.chunkOwners.size !== 1 || grid.chunkOwners.get("0,0,0") !== "owner" ||
+      grid.dirtyChunks.size !== 1 || !grid.dirtyChunks.has("0,0,0") ||
+      grid.mutationRevision !== forEachRevision) {
+    throw new Error("forEach callback exposed a raw tracked collection or changed state");
+  }
+  grid.chunkOwners.clear();
+  grid.dirtyChunks.clear();
 
   // The guarded proxies must retain normal collection behavior and tracking.
   const normalOwnerRevision = grid.mutationRevision;
