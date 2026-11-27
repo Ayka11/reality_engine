@@ -1438,7 +1438,10 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
       // Shadowing one would replace validation and mutation-revision tracking.
       if (property === "__proto__" || property === "add" || property === "set" ||
           property === "delete" || property === "clear") return false;
-      return Reflect.set(target, property, value, target);
+      // Preserve public Proxy receiver semantics for user-defined setters.
+      // Using the raw target here would let an own setter capture the native
+      // Map/Set instance and bypass every guarded collection mutator.
+      return Reflect.set(target, property, value, proxy);
     },
     defineProperty(target, property, descriptor) {
       // Keep Object.defineProperty from installing an own mutator that could
