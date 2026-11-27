@@ -271,7 +271,11 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       configurable: true,
       value: function (this: unknown) { return this; },
     });
-    const methodReceiver = collection.__receiverProbe__();
+    const ownMethod = collection.__receiverProbe__;
+    if (typeof ownMethod !== "function") {
+      throw new Error("Own collection receiver probe was not installed");
+    }
+    const methodReceiver = Reflect.apply(ownMethod, collection, []);
     if (methodReceiver !== collection) {
       throw new Error("Own collection method did not receive the public Proxy");
     }
