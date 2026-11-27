@@ -1343,6 +1343,12 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
     get(target, property) {
       const value = Reflect.get(target, property, target) as unknown;
       if (typeof value !== "function" || property === "constructor") return value;
+      // The tracked subclasses install their validated mutators as own,
+      // non-configurable, non-writable bound functions. Proxy invariants
+      // require returning that exact function object rather than rebinding it.
+      const ownDescriptor = Reflect.getOwnPropertyDescriptor(target, property);
+      if (ownDescriptor && ownDescriptor.configurable === false &&
+          ownDescriptor.writable === false) return value;
       const cached = boundMethods.get(property);
       if (cached) return cached;
       const bound = value.bind(target) as Function;
