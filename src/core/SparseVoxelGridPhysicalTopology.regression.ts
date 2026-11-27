@@ -135,6 +135,24 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   const grid = new SparseVoxelGrid(1, 1, 1);
   const guardedTopology = grid.physicalTopology;
   const guardedRevision = grid.mutationRevision;
+  const chunksPrototype = Object.getPrototypeOf(grid.chunks);
+  const ownersPrototype = Object.getPrototypeOf(grid.chunkOwners);
+  const dirtyPrototype = Object.getPrototypeOf(grid.dirtyChunks);
+
+  // Replacing a tracked collection's prototype would expose native mutators
+  // and bypass validation/revision hooks. Both throwing and reflective APIs
+  // must reject the attempt without changing any collection.
+  expectRejected("prototype replacement on chunks", () =>
+    Object.setPrototypeOf(grid.chunks, Map.prototype));
+  expectRejected("prototype replacement on chunk owners", () =>
+    Object.setPrototypeOf(grid.chunkOwners, Map.prototype));
+  expectRejected("prototype replacement on dirty chunks", () =>
+    Object.setPrototypeOf(grid.dirtyChunks, Set.prototype));
+  if (Reflect.setPrototypeOf(grid.chunks, Map.prototype) ||
+      Reflect.setPrototypeOf(grid.chunkOwners, Map.prototype) ||
+      Reflect.setPrototypeOf(grid.dirtyChunks, Set.prototype)) {
+    throw new Error("Tracked collection accepted reflective prototype replacement");
+  }
 
   // A native prototype call normally bypasses an overridden subclass method.
   // The public collection proxies must reject these calls before changing data.
@@ -159,6 +177,9 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       !(grid.dirtyChunks instanceof Set) ||
       grid.chunks.size !== 1 || !grid.chunks.has("0,0,0") ||
       grid.chunkOwners.size !== 0 || grid.dirtyChunks.size !== 0 ||
+      Object.getPrototypeOf(grid.chunks) !== chunksPrototype ||
+      Object.getPrototypeOf(grid.chunkOwners) !== ownersPrototype ||
+      Object.getPrototypeOf(grid.dirtyChunks) !== dirtyPrototype ||
       grid.mutationRevision !== guardedRevision || grid.physicalTopology !== guardedTopology) {
     throw new Error("Native Map/Set prototype bypass changed tracked collection state or revision");
   }
