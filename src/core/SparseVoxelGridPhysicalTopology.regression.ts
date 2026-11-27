@@ -173,6 +173,23 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   expectRejected("native Set.prototype.clear bypass on dirty chunks", () =>
     Set.prototype.clear.call(grid.dirtyChunks));
 
+  // Inherited Object.prototype methods must not leak the wrapped target.
+  // valueOf is normally bound by the proxy's generic method path, so it needs
+  // an explicit proxy-preserving implementation just like forEach.
+  const chunksValue = grid.chunks.valueOf();
+  const ownersValue = grid.chunkOwners.valueOf();
+  const dirtyValue = grid.dirtyChunks.valueOf();
+  if (chunksValue !== grid.chunks || ownersValue !== grid.chunkOwners ||
+      dirtyValue !== grid.dirtyChunks) {
+    throw new Error("Tracked collection valueOf exposed an underlying target");
+  }
+  expectRejected("native Map.prototype.set bypass through chunks.valueOf", () =>
+    Map.prototype.set.call(chunksValue, "1,0,0", new Chunk(1, 0, 0)));
+  expectRejected("native Map.prototype.set bypass through chunkOwners.valueOf", () =>
+    Map.prototype.set.call(ownersValue, "0,0,0", "bypass"));
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.valueOf", () =>
+    Set.prototype.add.call(dirtyValue, "1,0,0"));
+
   // Native forEach must not leak the wrapped target as its third callback
   // argument. Otherwise a callback can call Map/Set prototype mutators on
   // that raw instance and bypass the public proxy.
