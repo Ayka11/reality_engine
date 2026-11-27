@@ -161,3 +161,11 @@ Phase A has a verified, deliberately narrow hardening increment in draft [PR #87
 Exact PR head `95fc58524f95c6e36c965849b7585b9b5679a00c` passed [Reality Engine CI #3265](https://github.com/Ayka11/reality_engine/actions/runs/45984886218) and [Dependency Security Audit #227](https://github.com/Ayka11/reality_engine/actions/runs/45984886257).
 
 **Boundary:** this closes the native-prototype bypass only. It does not make the public level-zero chunk map private, prevent all direct structural mutations that pass the existing LOD0 validation, establish a single topology owner, migrate consumers, or enable mixed-LOD storage. PR #87 is still a separate draft and is not part of `main` until reviewed and merged. Phase A therefore remains incomplete; do not mark it done based on this checkpoint.
+
+## Implementation checkpoint — full native collection guard validation (2026-11-27)
+
+The follow-up hardening in [PR #87](https://github.com/Ayka11/reality_engine/pull/87) now also rejects attempts to replace the prototypes of the tracked `chunks`, `chunkOwners`, and `dirtyChunks` proxies using both `Object.setPrototypeOf` and `Reflect.setPrototypeOf`. The regression captures and rechecks the original prototypes as well as collection contents, cached topology, and mutation revision.
+
+Exact PR head `114296bb6b17e8074bd73e6ad8d04b1c196846dd` passed [Reality Engine CI #3267](https://github.com/Ayka11/reality_engine/actions/runs/45989489362) and [Dependency Security Audit #228](https://github.com/Ayka11/reality_engine/actions/runs/45989489347). The full CI includes the required SparseVoxelGrid physical-topology/native-collection regression and browser acceptance with restart/recovery coverage.
+
+**Boundary remains unchanged:** this is mutation-surface hardening for the existing level-zero grid. It does not privatize the structural maps, prevent every valid LOD0 structural mutation, establish one authoritative physical-topology owner, migrate runtime consumers, or enable adaptive refine/coarsen. Phase A remains incomplete; issue #50 remains open and fail-closed.
