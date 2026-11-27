@@ -258,7 +258,7 @@ function runDenseOriginMutationContractRegression(): void {
 
 function runSparseVoxelGridClearOwnershipRegression(): void {
   const grid = new SparseVoxelGrid(2, 2, 2);
-  const resident = grid.getOrCreateChunk(4, 0, 0);
+  grid.getOrCreateChunk(4, 0, 0);
   grid.assignChunkOwner("4,0,0", "pre-clear-owner");
   grid.markChunksDirty(["4,0,0", "99,0,0"]);
   const revisionBeforeClear = grid.mutationRevision;
