@@ -2,7 +2,7 @@
 
 **Status:** design/implementation gate; production mixed-LOD storage remains disabled.  
 **Baseline:** `main` at the time this plan was prepared (2026-11-27).  
-**Related work:** PRs #79–#84; issue #50.
+**Related work:** PRs #79–#87; issue #50.
 
 ## Executive decision
 
@@ -147,3 +147,17 @@ At minimum, automate:
 ## Release gate
 
 Issue #50 remains the production gate. Adaptive refine/coarsen stays disabled until all phases and end-to-end acceptance criteria are implemented and validated on one exact integrated mainline commit. A passing CI run for a helper, adapter or isolated state store is necessary evidence for that component, not proof of production mixed-LOD support.
+
+
+## Implementation checkpoint — native collection escape closure (2026-11-27)
+
+Phase A has a verified, deliberately narrow hardening increment in draft [PR #87](https://github.com/Ayka11/reality_engine/pull/87), based on the same mainline baseline:
+
+- `chunks`, `chunkOwners` and `dirtyChunks` are exposed through proxies that prevent `Map.prototype.*.call` / `Set.prototype.*.call` from bypassing the tracked subclass mutators.
+- Ordinary Map/Set methods remain usable and retain validation and mutation-revision behavior.
+- Regression coverage attempts native `set`, `delete`, `clear` and `add` bypasses and verifies collection contents, cached topology and mutation revision remain unchanged.
+- The regression is a required CI step.
+
+Exact PR head `95fc58524f95c6e36c965849b7585b9b5679a00c` passed [Reality Engine CI #3265](https://github.com/Ayka11/reality_engine/actions/runs/45984886218) and [Dependency Security Audit #227](https://github.com/Ayka11/reality_engine/actions/runs/45984886257).
+
+**Boundary:** this closes the native-prototype bypass only. It does not make the public level-zero chunk map private, prevent all direct structural mutations that pass the existing LOD0 validation, establish a single topology owner, migrate consumers, or enable mixed-LOD storage. PR #87 is still a separate draft and is not part of `main` until reviewed and merged. Phase A therefore remains incomplete; do not mark it done based on this checkpoint.
