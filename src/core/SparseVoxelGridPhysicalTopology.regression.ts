@@ -259,6 +259,44 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     }
   }
 
+  // Own user-defined methods and accessors must observe the public Proxy,
+  // never the raw Map/Set target. Otherwise an own property can return its
+  // receiver and reopen native prototype mutation bypasses.
+  for (const candidate of legacyEscapeCases) {
+    const collection = candidate.collection as unknown as Map<string, unknown> & {
+      __receiverProbe__?: () => unknown;
+      __getterReceiverProbe__?: unknown;
+    };
+    Object.defineProperty(collection, "__receiverProbe__", {
+      configurable: true,
+      value: function (this: unknown) { return this; },
+    });
+    const methodReceiver = collection.__receiverProbe__();
+    if (methodReceiver !== collection) {
+      throw new Error("Own collection method did not receive the public Proxy");
+    }
+    expectRejected("native mutator bypass through own method receiver", () =>
+      candidate.mutator === "add"
+        ? Set.prototype.add.call(methodReceiver, "proxy-own-method-bypass")
+        : Map.prototype.set.call(methodReceiver, "proxy-own-method-bypass", "bypass"));
+
+    Object.defineProperty(collection, "__getterReceiverProbe__", {
+      configurable: true,
+      get() { return this; },
+    });
+    const getterReceiver = collection.__getterReceiverProbe__;
+    if (getterReceiver !== collection) {
+      throw new Error("Own collection getter received or exposed the raw target");
+    }
+    expectRejected("native mutator bypass through own getter receiver", () =>
+      candidate.mutator === "add"
+        ? Set.prototype.add.call(getterReceiver, "proxy-own-getter-bypass")
+        : Map.prototype.set.call(getterReceiver, "proxy-own-getter-bypass", "bypass"));
+
+    delete (collection as unknown as Record<string, unknown>).__receiverProbe__;
+    delete (collection as unknown as Record<string, unknown>).__getterReceiverProbe__;
+  }
+
   // Chainable tracked mutators must return the public proxy, not their
   // bound raw target. Otherwise fluent Map.set / Set.add calls leak it.
   const existingChunk = grid.chunks.get("0,0,0");
