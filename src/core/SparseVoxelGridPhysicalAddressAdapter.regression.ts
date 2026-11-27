@@ -137,7 +137,9 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
       partialCoarseCoverage.cells[0].complete) {
     throw new Error("Physical dense-window coverage treated a partial coarse-cell intersection as complete");
   }
-  const fineCoverage = adapter.analyzeDenseWindowCoverage(boundaryWindow);
+  const fineCoverage = adapter.analyzeDenseWindowCoverage({
+    width: 1, height: 1, depth: 1, origin: { x: 64, y: 0, z: 0 },
+  });
   if (!fineCoverage.complete || fineCoverage.cells.length !== 1 ||
       fineCoverage.cells[0].level !== 0 ||
       fineCoverage.cells[0].expectedBaseSamples !== 1 ||
