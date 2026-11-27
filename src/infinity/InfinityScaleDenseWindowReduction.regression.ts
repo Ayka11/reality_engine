@@ -89,7 +89,7 @@ export function runInfinityScaleDenseWindowReductionRegression(): void {
     ...completeCoverage,
     cells: [
       completeCoverage.cells[0],
-      { ...completeCoverage.cells[0], chunkKey: "1:1,0,0", cellIndex: 0 },
+      { ...completeCoverage.cells[0] },
     ],
   };
   rejected("duplicate physical-cell identity", () =>
