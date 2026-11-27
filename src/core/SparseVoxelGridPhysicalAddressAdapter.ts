@@ -1,5 +1,7 @@
 import { CellState, CELL_FIELDS } from "./CellState";
 import { SparseVoxelGridPhysicalChunk } from "./SparseVoxelGridPhysicalChunk";
+const MAX_PHYSICAL_DENSE_WINDOW_SAMPLES = 1_048_576;
+
 import {
   compileSparseVoxelGridPhysicalTopology,
   resolveSparseVoxelGridPhysicalCell,
@@ -216,6 +218,15 @@ export class SparseVoxelGridPhysicalAddressAdapter {
       throw new RangeError("Sparse physical dense window requires positive safe dimensions and an integer origin");
     }
 
+    const sampleCount = window.width * window.height * window.depth;
+    if (!Number.isSafeInteger(sampleCount) || sampleCount <= 0 ||
+        sampleCount > MAX_PHYSICAL_DENSE_WINDOW_SAMPLES) {
+      throw new RangeError(
+        "Sparse physical dense-window coverage exceeds the " +
+        MAX_PHYSICAL_DENSE_WINDOW_SAMPLES + "-sample safety limit",
+      );
+    }
+
     const revision = this.#revision;
     const groups = new Map<string, {
       chunkKey: string;
@@ -303,8 +314,12 @@ export class SparseVoxelGridPhysicalAddressAdapter {
     const cellCount = window.width * window.height * window.depth;
     const valueCount = cellCount * CELL_FIELDS;
     if (!Number.isSafeInteger(cellCount) || cellCount <= 0 ||
+        cellCount > MAX_PHYSICAL_DENSE_WINDOW_SAMPLES ||
         !Number.isSafeInteger(valueCount) || valueCount <= 0) {
-      throw new RangeError("Sparse physical dense-window projection exceeds safe typed-array geometry");
+      throw new RangeError(
+        "Sparse physical dense-window projection exceeds the " +
+        MAX_PHYSICAL_DENSE_WINDOW_SAMPLES + "-sample safety limit",
+      );
     }
 
     const revision = this.#revision;
