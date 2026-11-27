@@ -9,6 +9,7 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   const source = cell();
   source[F.ENERGY] = 64; source[F.DENSITY] = 8; source[F.INFORMATION] = 32;
   source[F.TEMPERATURE] = 300; source[F.WAVE_PHASE] = Math.PI - 0.1;
+  source[F.VELOCITY_X] = 12; source[F.VELOCITY_Y] = -6; source[F.VELOCITY_Z] = 3;
   source[F.MATERIAL_ID] = 7; // Entity occupancy is intentionally absent from this prolongation fixture.
 
   const targets = Array.from({ length: 8 }, () => cell());
@@ -17,10 +18,18 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   if (!prolongation.valid) throw new Error("Prolongation invariant failed: " + prolongation.violations.join(","));
   const energySum = targets.reduce((sum, target) => sum + target[F.ENERGY], 0);
   if (Math.abs(energySum - source[F.ENERGY]) > 1e-6) throw new Error("Extensive ENERGY prolongation is not conservative");
+  if (targets.some(target =>
+    target[F.VELOCITY_X] !== 12 ||
+    target[F.VELOCITY_Y] !== -6 ||
+    target[F.VELOCITY_Z] !== 3
+  )) {
+    throw new Error("Velocity components were not preserved by coarse-to-fine prolongation");
+  }
 
   const sources = Array.from({ length: 8 }, (_, index) => {
     const value = cell();
     value[F.ENERGY] = index + 1; value[F.DENSITY] = 10 + index; value[F.TEMPERATURE] = 280 + index;
+    value[F.VELOCITY_X] = index * 2; value[F.VELOCITY_Y] = -index; value[F.VELOCITY_Z] = index + 1;
     value[F.MATERIAL_ID] = index < 4 ? 3 : 5; value[F.AGENT_MARK] = 9;
     return value;
   });
@@ -35,6 +44,9 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   if (!restriction.valid) throw new Error("Restriction invariant failed: " + restriction.violations.join(","));
   if (target[F.ENERGY] !== 36) throw new Error("Extensive ENERGY restriction expected 36");
   if (target[F.DENSITY] !== 13.5 || target[F.TEMPERATURE] !== 283.5) throw new Error("Intensive restriction mean mismatch");
+  if (target[F.VELOCITY_X] !== 7 || target[F.VELOCITY_Y] !== -3.5 || target[F.VELOCITY_Z] !== 4.5) {
+    throw new Error("Fine-to-coarse restriction did not average all velocity components");
+  }
   if (target[F.MATERIAL_ID] !== 3 || target[F.AGENT_MARK] !== 9) throw new Error("Discrete restriction majority mismatch");
 
   const circularSources = [cell(), cell(), cell(), cell()];
@@ -45,7 +57,9 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   if (Math.abs(Math.abs(circularTarget[F.WAVE_PHASE]) - Math.PI) > 0.06) throw new Error("Circular phase wrap invariant failed");
 
   const faceSources = Array.from({ length: 4 }, (_, index) => {
-    const value = cell(); value[F.ENERGY] = index + 1; value[F.DENSITY] = 20 + index; return value;
+    const value = cell(); value[F.ENERGY] = index + 1; value[F.DENSITY] = 20 + index;
+    value[F.VELOCITY_X] = index + 1; value[F.VELOCITY_Y] = -(index + 1); value[F.VELOCITY_Z] = 2 * (index + 1);
+    return value;
   });
   const faceTarget = cell();
   try {
@@ -54,6 +68,9 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     throw new Error(`Face restriction stage: ${error instanceof Error ? error.message : String(error)}`);
   }
   if (faceTarget[F.ENERGY] !== 10 || faceTarget[F.DENSITY] !== 21.5) throw new Error("Face restriction extensive-sum/intensive-average semantics failed");
+  if (faceTarget[F.VELOCITY_X] !== 2.5 || faceTarget[F.VELOCITY_Y] !== -2.5 || faceTarget[F.VELOCITY_Z] !== 5) {
+    throw new Error("Face restriction did not average velocity vector components");
+  }
 
   const validSpec = {
     sourceChunk: "1:0,0,0",
@@ -104,22 +121,27 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     unchanged(target, before, label);
   };
 
-  const spareSource = cell();
-  spareSource[F.SPARE_1] = 1;
+  const velocitySource = cell();
+  velocitySource[F.VELOCITY_X] = 1.25;
+  velocitySource[F.VELOCITY_Y] = -2.5;
+  velocitySource[F.VELOCITY_Z] = 5;
   const copyTarget = new Array<number>(CELL_FIELDS).fill(17);
-  rejectedWithoutMutation("copy with a non-zero unsupported field", copyTarget,
-    () => InfinityScaleLODTransfer.copy(spareSource, copyTarget), "unsupported field");
-
-  const prolongTargets = Array.from({ length: 8 }, () => new Array<number>(CELL_FIELDS).fill(19));
-  const prolongBefore = prolongTargets.map(value => [...value]);
-  let unsupportedProlongationRejected = false;
-  try { InfinityScaleLODTransfer.prolongate(spareSource, prolongTargets, 1, 0); }
-  catch (error) {
-    unsupportedProlongationRejected = error instanceof Error && error.message.includes("unsupported field");
+  const copyResult = InfinityScaleLODTransfer.copy(velocitySource, copyTarget);
+  if (copyTarget[F.VELOCITY_X] !== 1.25 ||
+      copyTarget[F.VELOCITY_Y] !== -2.5 ||
+      copyTarget[F.VELOCITY_Z] !== 5 ||
+      ![F.VELOCITY_X, F.VELOCITY_Y, F.VELOCITY_Z].every(field =>
+        copyResult.transferredFields.includes(field) &&
+        InfinityScaleLODTransfer.continuousFields.includes(field) &&
+        InfinityScaleLODTransfer.policy(field) === "intensive"
+      )) {
+    throw new Error("Same-level copy did not preserve registered velocity components");
   }
-  if (!unsupportedProlongationRejected ||
-      prolongTargets.some((value, index) => value.some((field, offset) => !Object.is(field, prolongBefore[index][offset])))) {
-    throw new Error("Prolongation did not reject unsupported payloads atomically");
+  // Deprecated SPARE aliases intentionally resolve to the same velocity slots.
+  if (InfinityScaleLODTransfer.policy(F.SPARE_1) !== "intensive" ||
+      InfinityScaleLODTransfer.policy(F.SPARE_2) !== "intensive" ||
+      InfinityScaleLODTransfer.policy(F.SPARE_3) !== "intensive") {
+    throw new Error("Deprecated spare aliases do not preserve the active velocity field semantics");
   }
 
   const invalidNumeric = cell();
@@ -177,15 +199,12 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     throw new Error("Prolongation duplicated an entity identity or partially changed target cells");
   }
 
-  // Unsupported fields are explicitly cleared only when their source payload
-  // is already zero; stale target contents must never survive as apparent data.
-  const zeroUnsupportedTarget = new Array<number>(CELL_FIELDS).fill(55);
-  InfinityScaleLODTransfer.copy(cell(), zeroUnsupportedTarget);
-  for (const field of [F.SPARE_1, F.SPARE_2, F.SPARE_3]) {
-    if (zeroUnsupportedTarget[field] !== 0) {
-      throw new Error("Successful transfer retained stale unsupported target field " + field);
-    }
-  }
+  // All 24 current slots now have explicit transfer semantics; future unknown
+  // indices must fail lookup rather than silently inheriting an alias policy.
+  let unknownFieldRejected = false;
+  try { InfinityScaleLODTransfer.policy(CELL_FIELDS); }
+  catch { unknownFieldRejected = true; }
+  if (!unknownFieldRejected) throw new Error("LOD transfer accepted an unregistered cell field index");
 
 
   // Individually valid Float32 inputs can still overflow during an extensive
@@ -214,14 +233,17 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   const boundarySource = cell();
   boundarySource[F.ENERGY] = 64;
   boundarySource[F.DENSITY] = 8;
+  boundarySource[F.VELOCITY_X] = 3;
+  boundarySource[F.VELOCITY_Y] = -4;
+  boundarySource[F.VELOCITY_Z] = 5;
   const boundaryTarget = new Array<number>(CELL_FIELDS).fill(61);
   const boundaryResult = InfinityScaleLODTransfer.prolongateBoundaryCell(boundarySource, boundaryTarget, 1, 0);
   if (boundaryResult.operation !== "prolongation" ||
       boundaryTarget[F.ENERGY] !== 8 ||
       boundaryTarget[F.DENSITY] !== 8 ||
-      boundaryTarget[F.SPARE_1] !== 0 ||
-      boundaryTarget[F.SPARE_2] !== 0 ||
-      boundaryTarget[F.SPARE_3] !== 0) {
+      boundaryTarget[F.VELOCITY_X] !== 3 ||
+      boundaryTarget[F.VELOCITY_Y] !== -4 ||
+      boundaryTarget[F.VELOCITY_Z] !== 5) {
     throw new Error("Boundary prolongation did not publish the complete staged cell result");
   }
 
