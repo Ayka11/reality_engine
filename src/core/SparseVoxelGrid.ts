@@ -1476,11 +1476,9 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
     super();
     this.#onMutation = onMutation;
     this.#onChunkContentMutation = onChunkContentMutation;
-    Object.defineProperties(this, {
-      set: { value: this.set.bind(this), writable: false, configurable: true },
-      delete: { value: this.delete.bind(this), writable: false, configurable: false },
-      clear: { value: this.clear.bind(this), writable: false, configurable: false },
-    });
+    // Keep mutators on the prototype. guardNativeCollection binds them only
+    // behind the public Proxy, so own-property descriptors cannot expose a
+    // bound reference to this raw Map instance.
   }
 
   #attach(chunk: Chunk): void {
