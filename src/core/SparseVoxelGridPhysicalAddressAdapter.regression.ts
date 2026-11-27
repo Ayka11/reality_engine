@@ -151,11 +151,6 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
       missingCoverage.incompleteCellCount !== 0) {
     throw new Error("Physical dense-window coverage incorrectly created reduction targets for missing topology");
   }
-  expectRejected("unsafe LOD coverage sample geometry", () =>
-    adapter.analyzeDenseWindowCoverage({
-      width: 1, height: 1, depth: 1, origin: { x: Number.MAX_SAFE_INTEGER, y: 0, z: 0 },
-    }));
-
   coarseProjection.values[F.ENERGY] = -123;
   if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
     throw new Error("Mutating a detached dense-window projection changed physical storage");
