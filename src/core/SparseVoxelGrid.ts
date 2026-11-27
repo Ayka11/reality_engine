@@ -1381,6 +1381,7 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
   // Use a null-prototype record: the cache itself must not depend on mutable
   // Map.prototype methods while defending against global Map prototype tampering.
   const boundMethods = Object.create(null) as Record<PropertyKey, Function>;
+  const isMap = collection instanceof Map;
   let proxy: T;
   proxy = new Proxy(collection, {
     get(target, property) {
