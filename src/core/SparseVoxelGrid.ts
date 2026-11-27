@@ -18,6 +18,9 @@ import {
 // not resolve Map/Set methods dynamically from mutable global prototypes.
 const NATIVE_MAP_GET = Map.prototype.get as Function;
 const NATIVE_MAP_HAS = Map.prototype.has as Function;
+const NATIVE_MAP_SET = Map.prototype.set as Function;
+const NATIVE_MAP_DELETE = Map.prototype.delete as Function;
+const NATIVE_MAP_CLEAR = Map.prototype.clear as Function;
 const NATIVE_MAP_ENTRIES = Map.prototype.entries as Function;
 const NATIVE_MAP_KEYS = Map.prototype.keys as Function;
 const NATIVE_MAP_VALUES = Map.prototype.values as Function;
@@ -25,6 +28,9 @@ const NATIVE_MAP_FOR_EACH = Map.prototype.forEach as Function;
 const NATIVE_MAP_ITERATOR = Map.prototype[Symbol.iterator] as Function;
 const NATIVE_MAP_SIZE_GETTER = Object.getOwnPropertyDescriptor(Map.prototype, "size")?.get as Function;
 const NATIVE_SET_HAS = Set.prototype.has as Function;
+const NATIVE_SET_ADD = Set.prototype.add as Function;
+const NATIVE_SET_DELETE = Set.prototype.delete as Function;
+const NATIVE_SET_CLEAR = Set.prototype.clear as Function;
 const NATIVE_SET_ENTRIES = Set.prototype.entries as Function;
 const NATIVE_SET_KEYS = Set.prototype.keys as Function;
 const NATIVE_SET_VALUES = Set.prototype.values as Function;
@@ -1523,21 +1529,22 @@ class MutationTrackedSet<T> extends Set<T> {
 
   override add(value: T): this {
     this.#validateValue?.(value);
-    const existed = this.has(value);
-    super.add(value);
+    const existed = Reflect.apply(NATIVE_SET_HAS, this, [value]) as boolean;
+    Reflect.apply(NATIVE_SET_ADD, this, [value]);
     if (!existed) this.#onMutation();
     return this;
   }
 
   override delete(value: T): boolean {
-    const deleted = super.delete(value);
+    const deleted = Reflect.apply(NATIVE_SET_DELETE, this, [value]) as boolean;
     if (deleted) this.#onMutation();
     return deleted;
   }
 
   override clear(): void {
-    if (this.size === 0) return;
-    super.clear();
+    const size = Reflect.apply(NATIVE_SET_SIZE_GETTER, this, []) as number;
+    if (size === 0) return;
+    Reflect.apply(NATIVE_SET_CLEAR, this, []);
     this.#onMutation();
   }
 }
@@ -1551,22 +1558,23 @@ class MutationTrackedMap<K, V> extends Map<K, V> {
 
   override set(key: K, value: V): this {
     this.#validateEntry?.(key, value);
-    const existed = this.has(key);
-    const previous = this.get(key);
-    super.set(key, value);
+    const existed = Reflect.apply(NATIVE_MAP_HAS, this, [key]) as boolean;
+    const previous = Reflect.apply(NATIVE_MAP_GET, this, [key]) as V | undefined;
+    Reflect.apply(NATIVE_MAP_SET, this, [key, value]);
     if (!existed || previous !== value) this.#onMutation();
     return this;
   }
 
   override delete(key: K): boolean {
-    const deleted = super.delete(key);
+    const deleted = Reflect.apply(NATIVE_MAP_DELETE, this, [key]) as boolean;
     if (deleted) this.#onMutation();
     return deleted;
   }
 
   override clear(): void {
-    if (this.size === 0) return;
-    super.clear();
+    const size = Reflect.apply(NATIVE_MAP_SIZE_GETTER, this, []) as number;
+    if (size === 0) return;
+    Reflect.apply(NATIVE_MAP_CLEAR, this, []);
     this.#onMutation();
   }
 }
@@ -1585,7 +1593,8 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
   }
 
   #attach(chunk: Chunk): void {
-    const existing = this.#registrations.get(chunk);
+    const existing = Reflect.apply(NATIVE_MAP_GET, this.#registrations, [chunk]) as
+      { listener: () => void; references: number } | undefined;
     if (existing) {
       existing.references++;
       return;
@@ -1594,17 +1603,18 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
     // physical topology or active chunk range. Keep them off the map-change
     // path so cached physical addressing is not rebuilt for every cell write.
     const listener = () => this.#onChunkContentMutation();
-    this.#registrations.set(chunk, { listener, references: 1 });
+    Reflect.apply(NATIVE_MAP_SET, this.#registrations, [chunk, { listener, references: 1 }]);
     chunk.addMutationListener(listener);
   }
 
   #detach(chunk: Chunk): void {
-    const registration = this.#registrations.get(chunk);
+    const registration = Reflect.apply(NATIVE_MAP_GET, this.#registrations, [chunk]) as
+      { listener: () => void; references: number } | undefined;
     if (!registration) return;
     registration.references--;
     if (registration.references > 0) return;
     chunk.removeMutationListener(registration.listener);
-    this.#registrations.delete(chunk);
+    Reflect.apply(NATIVE_MAP_DELETE, this.#registrations, [chunk]);
   }
 
   override set(key: string, chunk: Chunk): this {
@@ -1634,11 +1644,11 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
       );
     }
 
-    const existed = this.has(key);
-    const previous = this.get(key);
+    const existed = Reflect.apply(NATIVE_MAP_HAS, this, [key]) as boolean;
+    const previous = Reflect.apply(NATIVE_MAP_GET, this, [key]) as Chunk | undefined;
     if (existed && previous === chunk) return this;
 
-    super.set(key, chunk);
+    Reflect.apply(NATIVE_MAP_SET, this, [key, chunk]);
     if (existed && previous) this.#detach(previous);
     this.#attach(chunk);
     this.#onMutation();
@@ -1646,9 +1656,9 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
   }
 
   override delete(key: string): boolean {
-    if (!this.has(key)) return false;
-    const previous = this.get(key);
-    const deleted = super.delete(key);
+    if (!Reflect.apply(NATIVE_MAP_HAS, this, [key])) return false;
+    const previous = Reflect.apply(NATIVE_MAP_GET, this, [key]) as Chunk | undefined;
+    const deleted = Reflect.apply(NATIVE_MAP_DELETE, this, [key]) as boolean;
     if (deleted && previous) {
       this.#detach(previous);
       this.#onMutation();
@@ -1657,9 +1667,10 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
   }
 
   override clear(): void {
-    if (this.size === 0) return;
-    const chunks = [...this.values()];
-    super.clear();
+    const size = Reflect.apply(NATIVE_MAP_SIZE_GETTER, this, []) as number;
+    if (size === 0) return;
+    const chunks = [...(Reflect.apply(NATIVE_MAP_VALUES, this, []) as Iterable<Chunk>)];
+    Reflect.apply(NATIVE_MAP_CLEAR, this, []);
     for (const chunk of chunks) this.#detach(chunk);
     this.#onMutation();
   }
