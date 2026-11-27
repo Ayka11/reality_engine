@@ -943,6 +943,7 @@ export class SparseVoxelGrid {
       this.#_sparseDenseBackBuffer.fill(0);
       this.chunks.clear();
       this.dirtyChunks.clear();
+      this.chunkOwners.clear();
       this.#seedDenseWindowChunks();
       this.#markMutation();
     } finally { endMutation(); }
