@@ -42,6 +42,14 @@ export function runInfinityScaleDenseWindowReductionRegression(): void {
     throw new Error("Coverage-gated dense-window reduction did not stage the expected full-cell field result");
   }
 
+  const emptyCoverage = {
+    width: 2, height: 2, depth: 2, revision: 19,
+    complete: true, incompleteCellCount: 0, cells: [],
+  };
+  if (stageDenseWindowPhysicalReductions(values, emptyCoverage, 19).length !== 0) {
+    throw new Error("Coverage-gated dense-window reduction invented targets for an empty physical intersection");
+  }
+
   const levelZeroCoverage = {
     width: 2, height: 2, depth: 2, revision: 18,
     complete: true, incompleteCellCount: 0,
