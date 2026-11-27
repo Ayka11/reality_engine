@@ -11,6 +11,7 @@ import { runInfinityScaleChunkExecutionContextBoundaryRegression } from "../src/
 import { runInfinityScaleLODStateRecoveryRegression } from "../src/infinity/InfinityScaleLODStateRecovery.regression";
 import { runInfinityScaleExecutionAdapterBoundaryRegression } from "../src/infinity/InfinityScaleExecutionAdapter.regression";
 import { runInfinityScaleLODTransferInvariantRegression } from "../src/infinity/InfinityScaleLODTransfer.regression";
+import { runInfinityScaleLODPhysicalCellBatchRegression } from "../src/infinity/InfinityScaleLODPhysicalCellBatch.regression";
 import { runInfinityScaleDenseWindowReductionRegression } from "../src/infinity/InfinityScaleDenseWindowReduction.regression";
 import { runInfinityScaleLODResetInvalidationRegression, runInfinityScaleLODTopologyRevisionRegression } from "../src/infinity/InfinityScaleLODState.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "../src/infinity/InfinityScaleLODMultiFrame.regression";
@@ -26,6 +27,7 @@ runInfinityScaleChunkExecutionContextBoundaryRegression();
 runInfinityScaleGlobalLODTransactionRegression();
 runInfinityScaleExecutionAdapterBoundaryRegression();
 runInfinityScaleLODTransferInvariantRegression();
+runInfinityScaleLODPhysicalCellBatchRegression();
 runInfinityScaleDenseWindowReductionRegression();
 runInfinityScaleLODStateRecoveryRegression();
 runInfinityScaleLODResetInvalidationRegression();
