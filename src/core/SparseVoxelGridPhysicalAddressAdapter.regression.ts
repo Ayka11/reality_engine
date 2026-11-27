@@ -186,6 +186,17 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
     adapter.resolveDenseWindowCell(0, 0, 0, {
       width: 1, height: 1, depth: 1, origin: { x: 0.5, y: 0, z: 0 },
     }));
+
+  // Reject pathological dimensions before entering a potentially enormous
+  // coverage loop or allocating a multi-gigabyte projection typed array.
+  const oversizedWindow = {
+    width: 1025, height: 1024, depth: 1,
+    origin: { x: 0, y: 0, z: 0 },
+  };
+  expectRejected("oversized dense-window coverage", () =>
+    adapter.analyzeDenseWindowCoverage(oversizedWindow));
+  expectRejected("oversized dense-window projection", () =>
+    adapter.projectDenseWindow(oversizedWindow));
   expectRejected("unsafe dense-window global coordinate", () =>
     adapter.resolveDenseWindowCell(1, 0, 0, {
       width: 2, height: 1, depth: 1, origin: { x: Number.MAX_SAFE_INTEGER, y: 0, z: 0 },
