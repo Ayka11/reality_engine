@@ -1,4 +1,4 @@
-import { F } from "./CellState";
+import { CELL_FIELDS, F } from "./CellState";
 import { SparseVoxelGridPhysicalAddressAdapter } from "./SparseVoxelGridPhysicalAddressAdapter";
 import { SparseVoxelGridPhysicalChunk } from "./SparseVoxelGridPhysicalChunk";
 
@@ -87,11 +87,45 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
       !Object.isFrozen(denseOrigin) || !Object.isFrozen(denseOrigin.physical)) {
     throw new Error("Physical dense-window bridge failed to map coarse-cell aliases through the global origin");
   }
+  const coarseProjection = adapter.projectDenseWindow(coarseWindow);
+  if (coarseProjection.values.length !== 8 * CELL_FIELDS ||
+      coarseProjection.revision !== adapter.revision ||
+      coarseProjection.coarseCellAliases.length !== 1 ||
+      coarseProjection.coarseCellAliases[0].chunkKey !== coarse.key ||
+      coarseProjection.coarseCellAliases[0].cellIndex !== denseOrigin.physical.cellIndex ||
+      coarseProjection.coarseCellAliases[0].level !== 1 ||
+      coarseProjection.coarseCellAliases[0].denseIndices.join(",") !== "0,1,2,3,4,5,6,7" ||
+      !Object.isFrozen(coarseProjection) ||
+      !Object.isFrozen(coarseProjection.coarseCellAliases) ||
+      !Object.isFrozen(coarseProjection.coarseCellAliases[0].denseIndices)) {
+    throw new Error("Physical dense-window projection failed to expose detached values and coarse-cell alias groups");
+  }
+  for (let denseIndex = 0; denseIndex < 8; denseIndex++) {
+    if (coarseProjection.values[denseIndex * CELL_FIELDS + F.ENERGY] !== 72) {
+      throw new Error("Physical dense-window projection failed to replicate a coarse front-buffer value");
+    }
+  }
+  coarseProjection.values[F.ENERGY] = -123;
+  if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
+    throw new Error("Mutating a detached dense-window projection changed physical storage");
+  }
+
   const boundaryWindow = { width: 1, height: 1, depth: 1, origin: { x: 64, y: 0, z: 0 } };
   const denseBoundary = adapter.resolveDenseWindowCell(0, 0, 0, boundaryWindow);
   if (!denseBoundary || denseBoundary.physical.chunk.key !== fine.key ||
       denseBoundary.physical.localX !== 0) {
     throw new Error("Physical dense-window bridge failed at a mixed-LOD chunk boundary");
+  }
+  const fineProjection = adapter.projectDenseWindow(boundaryWindow);
+  if (fineProjection.values[F.ENERGY] !== 9 || fineProjection.coarseCellAliases.length !== 0) {
+    throw new Error("Physical dense-window projection failed to read a level-zero boundary cell");
+  }
+  const missingProjection = adapter.projectDenseWindow({
+    width: 1, height: 1, depth: 1, origin: { x: 96, y: 0, z: 0 },
+  });
+  if (missingProjection.values.some(value => value !== 0) ||
+      missingProjection.coarseCellAliases.length !== 0) {
+    throw new Error("Physical dense-window projection did not zero-fill missing topology");
   }
   if (adapter.resolveDenseWindowCell(0, 0, 0, {
     width: 1, height: 1, depth: 1, origin: { x: 96, y: 0, z: 0 },
@@ -131,5 +165,5 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
   expectRejected("out-of-range back-buffer coordinates", () =>
     adapter.getBackCell(fine.key, 0, -1, 0));
 
-  console.log("SparseVoxelGrid physical address adapter mixed-LOD resolution, dense-window addressing, alias detection, boundary, detached ownership and tracked-write regressions: PASS");
+  console.log("SparseVoxelGrid physical address adapter mixed-LOD resolution, dense-window addressing/projection, alias detection, boundary, detached ownership and tracked-write regressions: PASS");
 }
