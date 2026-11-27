@@ -268,6 +268,22 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       __getterReceiverProbe__?: unknown;
       __setterReceiverProbe__?: unknown;
     };
+    const trackedPrototype = Object.getPrototypeOf(collection);
+    const originalMutator = Reflect.get(trackedPrototype, candidate.mutator);
+    if (!Object.isFrozen(trackedPrototype) || typeof originalMutator !== "function") {
+      throw new Error("Tracked collection prototype is not frozen with its guarded mutator");
+    }
+    expectRejected("shared prototype mutator replacement", () =>
+      Object.defineProperty(trackedPrototype, candidate.mutator, {
+        configurable: true,
+        writable: true,
+        value: candidate.mutator === "add" ? Set.prototype.add : Map.prototype.set,
+      }));
+    expectRejected("shared prototype-chain replacement", () =>
+      Object.setPrototypeOf(trackedPrototype, Object.prototype));
+    if (Reflect.get(trackedPrototype, candidate.mutator) !== originalMutator) {
+      throw new Error("Tracked collection prototype mutator changed after rejected replacement");
+    }
     Object.defineProperty(collection, "__receiverProbe__", {
       configurable: true,
       value: function (this: unknown) { return this; },
