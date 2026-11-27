@@ -1,4 +1,4 @@
-import { CELL_FIELDS } from "./CellState";
+import { CELL_FIELDS, F } from "./CellState";
 import { Chunk, CHUNK_SIZE } from "./Chunk";
 import { SparseVoxelGrid } from "./SparseVoxelGrid";
 import {
@@ -157,6 +157,24 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       negativeAddress.localX !== 31) {
     throw new Error("SparseVoxelGrid physical topology did not reflect a newly inserted negative-coordinate chunk");
   }
+
+  // The explicit physical lookup API must agree with the canonical address
+  // descriptor while preserving the existing level-zero getCell hot path.
+  negativeChunk.getCell(31, 0, 0).set(F.ENERGY, 17);
+  const physicalNegativeCell = grid.getPhysicalCellAtBase(-1, 0, 0);
+  if (!physicalNegativeCell ||
+      physicalNegativeCell.get(F.ENERGY) !== 17 ||
+      !grid.getCell(-1, 0, 0) ||
+      !grid.getPhysicalCellAtBase(0, 0, 0) ||
+      grid.getPhysicalCellAtBase(32, 0, 0) !== null) {
+    throw new Error("SparseVoxelGrid physical cell lookup did not preserve level-zero coordinate parity");
+  }
+  let rejectedNonIntegerPhysicalCell = false;
+  try { grid.getPhysicalCellAtBase(-0.5, 0, 0); } catch { rejectedNonIntegerPhysicalCell = true; }
+  if (!rejectedNonIntegerPhysicalCell) {
+    throw new Error("SparseVoxelGrid physical cell lookup accepted a non-integer base coordinate");
+  }
+
   if (!grid.chunks.delete("-1,0,0")) {
     throw new Error("SparseVoxelGrid failed to remove a topology test chunk");
   }

@@ -639,6 +639,25 @@ export class SparseVoxelGrid {
     return chunk.getCell(lx, ly, lz);
   }
 
+  /**
+   * Resolve a base-space coordinate through the canonical physical topology
+   * index before returning the tracked cell. This is the explicit LOD-aware
+   * lookup seam for callers migrating away from coordinate-only chunk math.
+   *
+   * The legacy getCell() hot path remains unchanged until mixed-LOD storage,
+   * dense-window synchronization, worker/GPU and persistence paths are migrated
+   * as one compatible production contract.
+   */
+  getPhysicalCellAtBase(gx: number, gy: number, gz: number): CellState | null {
+    const address = this.resolvePhysicalCellAddress(gx, gy, gz);
+    if (!address) return null;
+    const chunk = this.chunks.get(address.chunk.key);
+    if (!chunk) {
+      throw new Error("SparseVoxelGrid physical topology/map mismatch for " + address.chunk.key);
+    }
+    return chunk.getCell(address.localX, address.localY, address.localZ);
+  }
+
   cell(x: number, y: number, z: number): CellState {
     this.#assertDenseCoordinates(x, y, z, "cell");
     this.#getOrCreateChunkForGlobal(x, y, z);
