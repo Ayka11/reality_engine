@@ -31,38 +31,6 @@ export interface InfinityScaleLODStateSnapshot {
   regionOwnership?: InfinityScaleLODRegionOwnershipSnapshot[];
 }
 
-function assertNonOverlappingLODChunkKeys(keys: readonly string[]): void {
-  const unique = new Set<string>();
-  for (const key of keys) {
-    const parsed = parseInfinityScaleChunkKey(key);
-    if (unique.has(parsed.key)) {
-      throw new Error("Infinity Scale LOD topology contains a duplicate chunk: " + parsed.key);
-    }
-    unique.add(parsed.key);
-  }
-
-  // Dyadic aligned chunks are either disjoint or one is an ancestor of the
-  // other. Walking each chunk's bounded ancestor chain detects every overlap
-  // without allocating a cell-sized occupancy map or assuming CHUNK_SIZE.
-  for (const key of unique) {
-    const parsed = parseInfinityScaleChunkKey(key);
-    let x = parsed.x;
-    let y = parsed.y;
-    let z = parsed.z;
-    for (let level = parsed.level + 1; level <= 30; level++) {
-      x = Math.floor(x / 2);
-      y = Math.floor(y / 2);
-      z = Math.floor(z / 2);
-      const ancestor = `${level}:${x},${y},${z}`;
-      if (unique.has(ancestor)) {
-        throw new Error(
-          "Infinity Scale LOD topology overlaps: " + parsed.key + " is covered by " + ancestor,
-        );
-      }
-    }
-  }
-}
-
 function validateRegionOwnershipSnapshot(
   candidate: unknown,
   chunks: ReadonlyMap<string, InfinityScaleLODChunkState>,
@@ -248,8 +216,6 @@ export class InfinityScaleLODState {
       });
     }
 
-    assertNonOverlappingLODChunkKeys([...restored.keys()]);
-
     const restoredRegionOwnership = validateRegionOwnershipSnapshot(
       snapshot.regionOwnership,
       restored,
@@ -309,8 +275,6 @@ export class InfinityScaleLODState {
       }
       return this.exposeChunk(existing);
     }
-
-    assertNonOverlappingLODChunkKeys([...this.states.keys(), key]);
 
     const scale = 2 ** level;
     const state: InfinityScaleLODChunkState = {
