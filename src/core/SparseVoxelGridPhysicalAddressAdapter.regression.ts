@@ -225,7 +225,7 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
   const replacementRevision = adapter.replaceTopology(beforeReplacementRevision, [...children, fine]);
   if (replacementRevision !== beforeReplacementRevision + 1 ||
       adapter.revision !== replacementRevision ||
-      adapter.size !== 9 || adapter.topology.chunks.length !== 9 ||
+      Number(adapter.size) !== 9 || Number(adapter.topology.chunks.length) !== 9 ||
       adapter.topology.chunks.some(chunk => chunk.level !== 0)) {
     throw new Error("Physical topology replacement did not publish the complete refined topology in one revision");
   }
@@ -247,7 +247,7 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
       fine,
     ]));
   if (adapter.revision !== revisionBeforeInvalidReplacement ||
-      adapter.size !== 9 ||
+      Number(adapter.size) !== 9 ||
       adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 88) {
     throw new Error("Rejected physical topology replacement changed live topology, data, or revision");
   }
