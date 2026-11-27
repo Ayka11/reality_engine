@@ -207,6 +207,20 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     throw new Error("Native Map/Set prototype bypass changed tracked collection state or revision");
   }
 
+  // Mutator implementations must not be own properties: property
+  // descriptors would otherwise expose the bound raw-target functions.
+  for (const [collection, methods] of [
+    [grid.chunks, ["set", "delete", "clear"]],
+    [grid.chunkOwners, ["set", "delete", "clear"]],
+    [grid.dirtyChunks, ["add", "delete", "clear"]],
+  ] as const) {
+    for (const method of methods) {
+      if (Object.getOwnPropertyDescriptor(collection, method) !== undefined) {
+        throw new Error(`Tracked collection exposes own mutator descriptor: ${method}`);
+      }
+    }
+  }
+
   // Chainable tracked mutators must return the public proxy, not their
   // bound raw target. Otherwise fluent Map.set / Set.add calls leak it.
   const existingChunk = grid.chunks.get("0,0,0");
