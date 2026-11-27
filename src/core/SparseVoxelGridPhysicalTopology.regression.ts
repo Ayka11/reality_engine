@@ -133,6 +133,148 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   // authoritative map. Repeated reads reuse the snapshot; cell writes do not
   // invalidate topology, while structural map changes do.
   const grid = new SparseVoxelGrid(1, 1, 1);
+  const guardedTopology = grid.physicalTopology;
+  const guardedRevision = grid.mutationRevision;
+  const chunksPrototype = Object.getPrototypeOf(grid.chunks);
+  const ownersPrototype = Object.getPrototypeOf(grid.chunkOwners);
+  const dirtyPrototype = Object.getPrototypeOf(grid.dirtyChunks);
+
+  // Replacing a tracked collection's prototype would expose native mutators
+  // and bypass validation/revision hooks. Both throwing and reflective APIs
+  // must reject the attempt without changing any collection.
+  expectRejected("prototype replacement on chunks", () =>
+    Object.setPrototypeOf(grid.chunks, Map.prototype));
+  expectRejected("prototype replacement on chunk owners", () =>
+    Object.setPrototypeOf(grid.chunkOwners, Map.prototype));
+  expectRejected("prototype replacement on dirty chunks", () =>
+    Object.setPrototypeOf(grid.dirtyChunks, Set.prototype));
+  if (Reflect.setPrototypeOf(grid.chunks, Map.prototype) ||
+      Reflect.setPrototypeOf(grid.chunkOwners, Map.prototype) ||
+      Reflect.setPrototypeOf(grid.dirtyChunks, Set.prototype)) {
+    throw new Error("Tracked collection accepted reflective prototype replacement");
+  }
+
+  // A native prototype call normally bypasses an overridden subclass method.
+  // The public collection proxies must reject these calls before changing data.
+  expectRejected("native Map.prototype.set bypass on chunks", () =>
+    Map.prototype.set.call(grid.chunks, "1,0,0", new Chunk(1, 0, 0)));
+  expectRejected("native Map.prototype.delete bypass on chunks", () =>
+    Map.prototype.delete.call(grid.chunks, "0,0,0"));
+  expectRejected("native Map.prototype.clear bypass on chunks", () =>
+    Map.prototype.clear.call(grid.chunks));
+  expectRejected("native Map.prototype.set bypass on chunk owners", () =>
+    Map.prototype.set.call(grid.chunkOwners, "0,0,0", "owner"));
+  expectRejected("native Map.prototype.clear bypass on chunk owners", () =>
+    Map.prototype.clear.call(grid.chunkOwners));
+  expectRejected("native Set.prototype.add bypass on dirty chunks", () =>
+    Set.prototype.add.call(grid.dirtyChunks, "0,0,0"));
+  expectRejected("native Set.prototype.delete bypass on dirty chunks", () =>
+    Set.prototype.delete.call(grid.dirtyChunks, "0,0,0"));
+  expectRejected("native Set.prototype.clear bypass on dirty chunks", () =>
+    Set.prototype.clear.call(grid.dirtyChunks));
+
+  // Inherited Object.prototype methods must not leak the wrapped target.
+  // valueOf is normally bound by the proxy's generic method path, so it needs
+  // an explicit proxy-preserving implementation just like forEach.
+  const chunksValue = grid.chunks.valueOf();
+  const ownersValue = grid.chunkOwners.valueOf();
+  const dirtyValue = grid.dirtyChunks.valueOf();
+  if (chunksValue !== grid.chunks || ownersValue !== grid.chunkOwners ||
+      dirtyValue !== grid.dirtyChunks) {
+    throw new Error("Tracked collection valueOf exposed an underlying target");
+  }
+  expectRejected("native Map.prototype.set bypass through chunks.valueOf", () =>
+    Map.prototype.set.call(chunksValue, "1,0,0", new Chunk(1, 0, 0)));
+  expectRejected("native Map.prototype.set bypass through chunkOwners.valueOf", () =>
+    Map.prototype.set.call(ownersValue, "0,0,0", "bypass"));
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.valueOf", () =>
+    Set.prototype.add.call(dirtyValue, "1,0,0"));
+
+  // Native forEach must not leak the wrapped target as its third callback
+  // argument. Otherwise a callback can call Map/Set prototype mutators on
+  // that raw instance and bypass the public proxy.
+  expectRejected("native Map.prototype.set bypass through chunks.forEach receiver", () =>
+    grid.chunks.forEach((_chunk, _key, collection) =>
+      Map.prototype.set.call(collection, "1,0,0", new Chunk(1, 0, 0))));
+  if (!(grid.chunks instanceof Map) || !(grid.chunkOwners instanceof Map) ||
+      !(grid.dirtyChunks instanceof Set) ||
+      grid.chunks.size !== 1 || !grid.chunks.has("0,0,0") ||
+      grid.chunkOwners.size !== 0 || grid.dirtyChunks.size !== 0 ||
+      Object.getPrototypeOf(grid.chunks) !== chunksPrototype ||
+      Object.getPrototypeOf(grid.chunkOwners) !== ownersPrototype ||
+      Object.getPrototypeOf(grid.dirtyChunks) !== dirtyPrototype ||
+      grid.mutationRevision !== guardedRevision || grid.physicalTopology !== guardedTopology) {
+    throw new Error("Native Map/Set prototype bypass changed tracked collection state or revision");
+  }
+
+  // Mutator implementations must not be own properties: property
+  // descriptors would otherwise expose the bound raw-target functions.
+  for (const [collection, methods] of [
+    [grid.chunks, ["set", "delete", "clear"]],
+    [grid.chunkOwners, ["set", "delete", "clear"]],
+    [grid.dirtyChunks, ["add", "delete", "clear"]],
+  ] as const) {
+    for (const method of methods) {
+      if (Object.getOwnPropertyDescriptor(collection, method) !== undefined) {
+        throw new Error(`Tracked collection exposes own mutator descriptor: ${method}`);
+      }
+    }
+  }
+
+  // Chainable tracked mutators must return the public proxy, not their
+  // bound raw target. Otherwise fluent Map.set / Set.add calls leak it.
+  const existingChunk = grid.chunks.get("0,0,0");
+  if (!existingChunk || grid.chunks.set("0,0,0", existingChunk) !== grid.chunks) {
+    throw new Error("Tracked chunks.set did not return the public proxy");
+  }
+  expectRejected("native Map.prototype.set bypass through chunks.set result", () =>
+    Map.prototype.set.call(grid.chunks.set("0,0,0", existingChunk), "1,0,0", new Chunk(1, 0, 0)));
+  const chainedOwners = grid.chunkOwners.set("0,0,0", "owner");
+  if (chainedOwners !== grid.chunkOwners) {
+    throw new Error("Tracked chunkOwners.set did not return the public proxy");
+  }
+  expectRejected("native Map.prototype.set bypass through chunkOwners.set result", () =>
+    Map.prototype.set.call(chainedOwners, "1,0,0", "bypass"));
+  grid.chunkOwners.clear();
+  const chainedDirty = grid.dirtyChunks.add("0,0,0");
+  if (chainedDirty !== grid.dirtyChunks) {
+    throw new Error("Tracked dirtyChunks.add did not return the public proxy");
+  }
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.add result", () =>
+    Set.prototype.add.call(chainedDirty, "1,0,0"));
+  grid.dirtyChunks.clear();
+
+  // Seed each collection so forEach actually invokes its callback. Verify that
+  // the third callback argument is the public proxy, not the raw target.
+  grid.chunkOwners.set("0,0,0", "owner");
+  grid.dirtyChunks.add("0,0,0");
+  const forEachRevision = grid.mutationRevision;
+  expectRejected("native Map.prototype.set bypass through chunkOwners.forEach receiver", () =>
+    grid.chunkOwners.forEach((_owner, _key, collection) =>
+      Map.prototype.set.call(collection, "0,0,0", "bypass")));
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.forEach receiver", () =>
+    grid.dirtyChunks.forEach((_key, _sameKey, collection) =>
+      Set.prototype.add.call(collection, "1,0,0")));
+  if (Number(grid.chunkOwners.size) !== 1 || grid.chunkOwners.get("0,0,0") !== "owner" ||
+      Number(grid.dirtyChunks.size) !== 1 || !grid.dirtyChunks.has("0,0,0") ||
+      grid.mutationRevision !== forEachRevision) {
+    throw new Error("forEach callback exposed a raw tracked collection or changed state");
+  }
+  grid.chunkOwners.clear();
+  grid.dirtyChunks.clear();
+
+  // The guarded proxies must retain normal collection behavior and tracking.
+  const normalOwnerRevision = grid.mutationRevision;
+  grid.chunkOwners.set("0,0,0", "owner");
+  grid.dirtyChunks.add("0,0,0");
+  if (grid.chunkOwners.get("0,0,0") !== "owner" ||
+      !grid.dirtyChunks.has("0,0,0") ||
+      grid.mutationRevision <= normalOwnerRevision) {
+    throw new Error("Guarded tracked collections broke ordinary Map/Set mutation behavior");
+  }
+  grid.chunkOwners.clear();
+  grid.dirtyChunks.clear();
+
   const initialTopology = grid.physicalTopology;
   if (initialTopology !== grid.physicalTopology ||
       initialTopology.chunks.length !== grid.chunks.size ||

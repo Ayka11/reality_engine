@@ -448,27 +448,27 @@ export class SparseVoxelGrid {
       D: { writable: false, configurable: false },
       size: { writable: false, configurable: false },
     });
-    this.dirtyChunks = new MutationTrackedSet(
+    this.dirtyChunks = guardNativeCollection(new MutationTrackedSet(
       () => this.#markMutation(),
       key => {
         if (!this.#isValidChunkKey(key)) throw new Error(`Invalid dirty chunk key: ${String(key)}`);
       },
-    );
-    this.chunkOwners = new MutationTrackedMap(
+    ));
+    this.chunkOwners = guardNativeCollection(new MutationTrackedMap(
       () => this.#markMutation(),
       (key, ownerId) => {
         if (!this.#isValidChunkKey(key)) throw new Error(`Invalid chunk owner key: ${String(key)}`);
         if (typeof ownerId !== "string") throw new Error("Chunk owner ID must be a string");
       },
-    );
+    ));
     this.#_sparseDenseBuffer = new Float32Array(this.size * CELL_FIELDS);
     this.#_sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
     this.#_sparseDenseBufferView = createTrackedFloat32Array(this.#_sparseDenseBuffer, () => this.#markMutation());
     this.#_sparseDenseBackBufferView = createTrackedFloat32Array(this.#_sparseDenseBackBuffer, () => this.#markMutation());
-    this.chunks = new MutationTrackedChunkMap(
+    this.chunks = guardNativeCollection(new MutationTrackedChunkMap(
       () => this.#onChunkMapMutation(),
       () => this.#markMutation(),
-    );
+    ));
     Object.defineProperties(this, {
       chunks: { writable: false, configurable: false },
       dirtyChunks: { writable: false, configurable: false },
@@ -1331,16 +1331,105 @@ export class SparseVoxelGrid {
 export { CHUNK_SIZE, CHUNK_VOLUME };
 
 
+/**
+ * Expose tracked Map/Set instances through a Proxy so native prototype calls
+ * cannot bypass their validated overrides (for example Map.prototype.set.call).
+ * Ordinary collection methods are bound to the real instance because native
+ * Map/Set methods require their internal slots on the receiver.
+ */
+function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(collection: T): T {
+  const boundMethods = new Map<PropertyKey, Function>();
+  let proxy: T;
+  proxy = new Proxy(collection, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target) as unknown;
+      if (typeof value !== "function" || property === "constructor") return value;
+      // Object.prototype.valueOf would otherwise be bound to the raw target by
+      // the generic method binding below, leaking the underlying collection.
+      // Keep identity-style access on the public proxy.
+      if (property === "valueOf") {
+        const cached = boundMethods.get(property);
+        if (cached) return cached;
+        const guardedValueOf = () => proxy;
+        boundMethods.set(property, guardedValueOf);
+        return guardedValueOf;
+      }
+      // Tracked mutators return their bound receiver (the raw target).
+      // Wrap chainable Map.set / Set.add so fluent calls keep the public proxy.
+      if (property === "set" || property === "add") {
+        const cached = boundMethods.get(property);
+        if (cached) return cached;
+        const guardedMutator = (...args: unknown[]) => {
+          const result = Reflect.apply(value, target, args);
+          return result === target ? proxy : result;
+        };
+        boundMethods.set(property, guardedMutator);
+        return guardedMutator;
+      }
+      // Map/Set forEach passes its receiver as the callback's third argument.
+      // The method must execute against the real target to satisfy native
+      // collection internal-slot checks, but must never expose that target to
+      // user code: doing so would let callbacks invoke native prototype
+      // mutators without passing through this proxy.
+      if (property === "forEach") {
+        const cached = boundMethods.get(property);
+        if (cached) return cached;
+        const guardedForEach = (callback: unknown, thisArg?: unknown) => {
+          if (typeof callback !== "function") {
+            return Reflect.apply(value, target, [callback, thisArg]);
+          }
+          return Reflect.apply(value, target, [
+            (...callbackArgs: unknown[]) => {
+              callbackArgs[callbackArgs.length - 1] = proxy;
+              return Reflect.apply(callback, thisArg, callbackArgs);
+            },
+            thisArg,
+          ]);
+        };
+        boundMethods.set(property, guardedForEach);
+        return guardedForEach;
+      }
+      // Preserve exact values for any future non-configurable, non-writable
+      // own function properties to satisfy Proxy invariants. Tracked mutators
+      // intentionally live on prototypes so descriptors cannot expose a
+      // bound raw-target function.
+      const ownDescriptor = Reflect.getOwnPropertyDescriptor(target, property);
+      if (ownDescriptor && ownDescriptor.configurable === false &&
+          ownDescriptor.writable === false) return value;
+      const cached = boundMethods.get(property);
+      if (cached) return cached;
+      const bound = value.bind(target) as Function;
+      boundMethods.set(property, bound);
+      return bound;
+    },
+    // Changing the target prototype would replace the tracked subclass
+    // methods with native Map/Set mutators and reopen the validation bypass.
+    set(target, property, value) {
+      // Mutator methods must remain inherited from the tracked subclass.
+      // Shadowing one would replace validation and mutation-revision tracking.
+      if (property === "add" || property === "set" ||
+          property === "delete" || property === "clear") return false;
+      return Reflect.set(target, property, value, target);
+    },
+    defineProperty(target, property, descriptor) {
+      // Keep Object.defineProperty from installing an own mutator that could
+      // shadow the validated prototype implementation.
+      if (property === "add" || property === "set" ||
+          property === "delete" || property === "clear") return false;
+      return Reflect.defineProperty(target, property, descriptor);
+    },
+    setPrototypeOf() {
+      return false;
+    },
+  });
+  return proxy;
+}
+
 class MutationTrackedSet<T> extends Set<T> {
   #onMutation: () => void;
   #validateValue?: (value: T) => void;
   constructor(onMutation: () => void, validateValue?: (value: T) => void) {
     super(); this.#onMutation = onMutation; this.#validateValue = validateValue;
-    Object.defineProperties(this, {
-      add: { value: this.add.bind(this), writable: false, configurable: false },
-      delete: { value: this.delete.bind(this), writable: false, configurable: false },
-      clear: { value: this.clear.bind(this), writable: false, configurable: false },
-    });
   }
 
   override add(value: T): this {
@@ -1369,11 +1458,6 @@ class MutationTrackedMap<K, V> extends Map<K, V> {
   #validateEntry?: (key: K, value: V) => void;
   constructor(onMutation: () => void, validateEntry?: (key: K, value: V) => void) {
     super(); this.#onMutation = onMutation; this.#validateEntry = validateEntry;
-    Object.defineProperties(this, {
-      set: { value: this.set.bind(this), writable: false, configurable: false },
-      delete: { value: this.delete.bind(this), writable: false, configurable: false },
-      clear: { value: this.clear.bind(this), writable: false, configurable: false },
-    });
   }
 
   override set(key: K, value: V): this {
@@ -1406,11 +1490,9 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
     super();
     this.#onMutation = onMutation;
     this.#onChunkContentMutation = onChunkContentMutation;
-    Object.defineProperties(this, {
-      set: { value: this.set.bind(this), writable: false, configurable: false },
-      delete: { value: this.delete.bind(this), writable: false, configurable: false },
-      clear: { value: this.clear.bind(this), writable: false, configurable: false },
-    });
+    // Keep mutators on the prototype. guardNativeCollection binds them only
+    // behind the public Proxy, so own-property descriptors cannot expose a
+    // bound reference to this raw Map instance.
   }
 
   #attach(chunk: Chunk): void {
