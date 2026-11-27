@@ -169,3 +169,11 @@ The follow-up hardening in [PR #87](https://github.com/Ayka11/reality_engine/pul
 Exact PR head `114296bb6b17e8074bd73e6ad8d04b1c196846dd` passed [Reality Engine CI #3267](https://github.com/Ayka11/reality_engine/actions/runs/45989489362) and [Dependency Security Audit #228](https://github.com/Ayka11/reality_engine/actions/runs/45989489347). The full CI includes the required SparseVoxelGrid physical-topology/native-collection regression and browser acceptance with restart/recovery coverage.
 
 **Boundary remains unchanged:** this is mutation-surface hardening for the existing level-zero grid. It does not privatize the structural maps, prevent every valid LOD0 structural mutation, establish one authoritative physical-topology owner, migrate runtime consumers, or enable adaptive refine/coarsen. Phase A remains incomplete; issue #50 remains open and fail-closed.
+
+## Documentation checkpoint validation — exact PR #85 head
+
+The latest documentation commit is `cff4a9ad9d214a7e98fb2d2193ffe8a489cc8979`. The full [Reality Engine CI #3268](https://github.com/Ayka11/reality_engine/actions/runs/45992246625) completed successfully for this exact head. This is documentation-only validation and does not imply any runtime mixed-LOD capability.
+
+The runtime hardening evidence referenced above remains separately validated on PR #87 exact head `114296bb6b17e8074bd73e6ad8d04b1c196846dd` by CI #3267 and Dependency Security Audit #228.
+
+The production gate is unchanged: issue #50 remains open; mixed-LOD authoritative topology and adaptive refine/coarsen are not enabled.
