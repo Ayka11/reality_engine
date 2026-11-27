@@ -448,27 +448,27 @@ export class SparseVoxelGrid {
       D: { writable: false, configurable: false },
       size: { writable: false, configurable: false },
     });
-    this.dirtyChunks = new MutationTrackedSet(
+    this.dirtyChunks = guardNativeCollection(new MutationTrackedSet(
       () => this.#markMutation(),
       key => {
         if (!this.#isValidChunkKey(key)) throw new Error(`Invalid dirty chunk key: ${String(key)}`);
       },
-    );
-    this.chunkOwners = new MutationTrackedMap(
+    ));
+    this.chunkOwners = guardNativeCollection(new MutationTrackedMap(
       () => this.#markMutation(),
       (key, ownerId) => {
         if (!this.#isValidChunkKey(key)) throw new Error(`Invalid chunk owner key: ${String(key)}`);
         if (typeof ownerId !== "string") throw new Error("Chunk owner ID must be a string");
       },
-    );
+    ));
     this.#_sparseDenseBuffer = new Float32Array(this.size * CELL_FIELDS);
     this.#_sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
     this.#_sparseDenseBufferView = createTrackedFloat32Array(this.#_sparseDenseBuffer, () => this.#markMutation());
     this.#_sparseDenseBackBufferView = createTrackedFloat32Array(this.#_sparseDenseBackBuffer, () => this.#markMutation());
-    this.chunks = new MutationTrackedChunkMap(
+    this.chunks = guardNativeCollection(new MutationTrackedChunkMap(
       () => this.#onChunkMapMutation(),
       () => this.#markMutation(),
-    );
+    ));
     Object.defineProperties(this, {
       chunks: { writable: false, configurable: false },
       dirtyChunks: { writable: false, configurable: false },
@@ -1330,6 +1330,28 @@ export class SparseVoxelGrid {
 
 export { CHUNK_SIZE, CHUNK_VOLUME };
 
+
+/**
+ * Expose tracked Map/Set instances through a Proxy so native prototype calls
+ * cannot bypass their validated overrides (for example Map.prototype.set.call).
+ * Ordinary collection methods are bound to the real instance because native
+ * Map/Set methods require their internal slots on the receiver.
+ */
+function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(collection: T): T {
+  const boundMethods = new Map<PropertyKey, Function>();
+  return new Proxy(collection, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target) as unknown;
+      if (typeof value !== "function" || property === "constructor") return value;
+      let bound = boundMethods.get(property);
+      if (!bound) {
+        bound = value.bind(target);
+        boundMethods.set(property, bound);
+      }
+      return bound;
+    },
+  });
+}
 
 class MutationTrackedSet<T> extends Set<T> {
   #onMutation: () => void;
