@@ -256,12 +256,36 @@ function runDenseOriginMutationContractRegression(): void {
   }
 }
 
+function runSparseVoxelGridClearOwnershipRegression(): void {
+  const grid = new SparseVoxelGrid(2, 2, 2);
+  const resident = grid.getOrCreateChunk(4, 0, 0);
+  grid.assignChunkOwner("4,0,0", "pre-clear-owner");
+  grid.markChunksDirty(["4,0,0", "99,0,0"]);
+  const revisionBeforeClear = grid.mutationRevision;
+
+  grid.clear();
+
+  if (grid.chunkOwners.size !== 0 || grid.getOwnedChunks().length !== 0) {
+    throw new Error("SparseVoxelGrid.clear retained ownership metadata from the previous topology");
+  }
+  if (grid.chunks.has("4,0,0") || grid.chunks.get("0,0,0") === resident) {
+    throw new Error("SparseVoxelGrid.clear retained a pre-clear chunk instance");
+  }
+  if (grid.dirtyChunks.size !== 0) {
+    throw new Error("SparseVoxelGrid.clear retained dirty metadata from the previous topology");
+  }
+  if (grid.mutationRevision <= revisionBeforeClear) {
+    throw new Error("SparseVoxelGrid.clear did not publish a mutation revision");
+  }
+}
+
 export function runSparseVoxelGridRecoveryRegression(): void {
   runSparseVoxelGridPersistenceSchemaRegression();
   runSparseVoxelGridSnapshotDeltaV2Regression();
   runGridDimensionValidationRegression();
   runGridDimensionImmutabilityRegression();
   runDenseOriginMutationContractRegression();
+  runSparseVoxelGridClearOwnershipRegression();
   const grid = new SparseVoxelGrid(4, 3, 2);
   const denseIndex = grid.idx(1, 1, 1) + CELL_FIELDS - 1;
   grid.buffer[denseIndex] = 13;
