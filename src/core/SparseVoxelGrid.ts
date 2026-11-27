@@ -1339,10 +1339,34 @@ export { CHUNK_SIZE, CHUNK_VOLUME };
  */
 function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(collection: T): T {
   const boundMethods = new Map<PropertyKey, Function>();
-  return new Proxy(collection, {
+  let proxy: T;
+  proxy = new Proxy(collection, {
     get(target, property) {
       const value = Reflect.get(target, property, target) as unknown;
       if (typeof value !== "function" || property === "constructor") return value;
+      // Map/Set forEach passes its receiver as the callback's third argument.
+      // The method must execute against the real target to satisfy native
+      // collection internal-slot checks, but must never expose that target to
+      // user code: doing so would let callbacks invoke native prototype
+      // mutators without passing through this proxy.
+      if (property === "forEach") {
+        const cached = boundMethods.get(property);
+        if (cached) return cached;
+        const guardedForEach = (callback: unknown, thisArg?: unknown) => {
+          if (typeof callback !== "function") {
+            return Reflect.apply(value, target, [callback, thisArg]);
+          }
+          return Reflect.apply(value, target, [
+            (...callbackArgs: unknown[]) => {
+              callbackArgs[callbackArgs.length - 1] = proxy;
+              return Reflect.apply(callback, thisArg, callbackArgs);
+            },
+            thisArg,
+          ]);
+        };
+        boundMethods.set(property, guardedForEach);
+        return guardedForEach;
+      }
       // The tracked subclasses install their validated mutators as own,
       // non-configurable, non-writable bound functions. Proxy invariants
       // require returning that exact function object rather than rebinding it.
@@ -1361,6 +1385,7 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
       return false;
     },
   });
+  return proxy;
 }
 
 class MutationTrackedSet<T> extends Set<T> {
