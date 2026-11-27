@@ -1,6 +1,7 @@
 import { CellState, CELL_FIELDS } from "./CellState";
 import { SparseVoxelGridPhysicalChunk } from "./SparseVoxelGridPhysicalChunk";
-const MAX_PHYSICAL_DENSE_WINDOW_SAMPLES = 1_048_576;\nconst CHUNK_SIZE_CELLS = 32 * 32 * 32 * CELL_FIELDS;
+const MAX_PHYSICAL_DENSE_WINDOW_SAMPLES = 1_048_576;
+const CHUNK_SIZE_CELLS = 32 * 32 * 32 * CELL_FIELDS;
 
 import {
   compileSparseVoxelGridPhysicalTopology,
