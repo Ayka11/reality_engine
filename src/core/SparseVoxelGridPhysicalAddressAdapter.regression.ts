@@ -210,6 +210,52 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
     throw new Error("Caller-owned front/back chunk mutation leaked into the address adapter");
   }
 
+  // Refining one LOD1 parent into its exact eight LOD0 children is staged
+  // off to the side, then published as one topology/revision change.
+  const children: SparseVoxelGridPhysicalChunk[] = [];
+  for (let z = 0; z <= 1; z++)
+  for (let y = 0; y <= 1; y++)
+  for (let x = 0; x <= 1; x++) {
+    const child = new SparseVoxelGridPhysicalChunk(`${x},${y},${z}`);
+    children.push(child);
+  }
+  children[0].getCell(2, 4, 6).set(F.ENERGY, 88);
+  children[0].getBackCell(2, 4, 6).set(F.ENERGY, 89);
+  const beforeReplacementRevision = adapter.revision;
+  const replacementRevision = adapter.replaceTopology(beforeReplacementRevision, [...children, fine]);
+  if (replacementRevision !== beforeReplacementRevision + 1 ||
+      adapter.revision !== replacementRevision ||
+      adapter.size !== 9 || adapter.topology.chunks.length !== 9 ||
+      adapter.topology.chunks.some(chunk => chunk.level !== 0)) {
+    throw new Error("Physical topology replacement did not publish the complete refined topology in one revision");
+  }
+  const refinedAddress = adapter.resolve(2, 4, 6);
+  if (!refinedAddress || refinedAddress.chunk.key !== "0,0,0" ||
+      refinedAddress.localX !== 2 || refinedAddress.localY !== 4 || refinedAddress.localZ !== 6 ||
+      adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 88 ||
+      adapter.getBackCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 89 ||
+      adapter.getCellAtBase(64, 0, 0)?.get(F.ENERGY) !== 9) {
+    throw new Error("Physical topology replacement lost refined cell data or adjacent chunk state");
+  }
+  expectRejected("a stale topology replacement revision", () =>
+    adapter.replaceTopology(beforeReplacementRevision, [...children, fine]));
+  const revisionBeforeInvalidReplacement = adapter.revision;
+  expectRejected("an overlapping topology replacement candidate", () =>
+    adapter.replaceTopology(revisionBeforeInvalidReplacement, [
+      ...children,
+      new SparseVoxelGridPhysicalChunk("1:0,0,0"),
+      fine,
+    ]));
+  if (adapter.revision !== revisionBeforeInvalidReplacement ||
+      adapter.size !== 9 ||
+      adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 88) {
+    throw new Error("Rejected physical topology replacement changed live topology, data, or revision");
+  }
+  children[0].getCell(2, 4, 6).set(F.ENERGY, 999);
+  if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 88) {
+    throw new Error("Physical topology replacement retained caller-owned candidate chunk aliases");
+  }
+
   expectRejected("overlapping coarse/fine topology", () =>
     new SparseVoxelGridPhysicalAddressAdapter([
       new SparseVoxelGridPhysicalChunk("1:0,0,0"),
