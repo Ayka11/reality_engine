@@ -14,6 +14,46 @@ import {
   type SparseVoxelGridPersistenceSchemaVersion,
 } from "./SparseVoxelGridPersistenceSchema";
 
+// Capture native collection intrinsics once. The tracked collection Proxy must
+// not resolve Map/Set methods dynamically from mutable global prototypes.
+const NATIVE_MAP_GET = Map.prototype.get as Function;
+const NATIVE_MAP_HAS = Map.prototype.has as Function;
+const NATIVE_MAP_ENTRIES = Map.prototype.entries as Function;
+const NATIVE_MAP_KEYS = Map.prototype.keys as Function;
+const NATIVE_MAP_VALUES = Map.prototype.values as Function;
+const NATIVE_MAP_FOR_EACH = Map.prototype.forEach as Function;
+const NATIVE_MAP_ITERATOR = Map.prototype[Symbol.iterator] as Function;
+const NATIVE_MAP_SIZE_GETTER = Object.getOwnPropertyDescriptor(Map.prototype, "size")?.get as Function;
+const NATIVE_SET_HAS = Set.prototype.has as Function;
+const NATIVE_SET_ENTRIES = Set.prototype.entries as Function;
+const NATIVE_SET_KEYS = Set.prototype.keys as Function;
+const NATIVE_SET_VALUES = Set.prototype.values as Function;
+const NATIVE_SET_FOR_EACH = Set.prototype.forEach as Function;
+const NATIVE_SET_ITERATOR = Set.prototype[Symbol.iterator] as Function;
+const NATIVE_SET_SIZE_GETTER = Object.getOwnPropertyDescriptor(Set.prototype, "size")?.get as Function;
+
+function getNativeCollectionMethod(isMap: boolean, property: PropertyKey): Function | undefined {
+  if (isMap) {
+    switch (property) {
+      case "get": return NATIVE_MAP_GET;
+      case "has": return NATIVE_MAP_HAS;
+      case "entries": return NATIVE_MAP_ENTRIES;
+      case "keys": return NATIVE_MAP_KEYS;
+      case "values": return NATIVE_MAP_VALUES;
+      case Symbol.iterator: return NATIVE_MAP_ITERATOR;
+      default: return undefined;
+    }
+  }
+  switch (property) {
+    case "has": return NATIVE_SET_HAS;
+    case "entries": return NATIVE_SET_ENTRIES;
+    case "keys": return NATIVE_SET_KEYS;
+    case "values": return NATIVE_SET_VALUES;
+    case Symbol.iterator: return NATIVE_SET_ITERATOR;
+    default: return undefined;
+  }
+}
+
 export interface SerializedChunk {
   key: string;
   cx: number;
@@ -1343,27 +1383,22 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
   proxy = new Proxy(collection, {
     get(target, property) {
       // Own properties are part of the public Proxy surface, not privileged
-      // methods of the raw Map/Set target. In particular, running an own getter
-      // with `target` as receiver or binding an own function to `target`
-      // leaks the native collection and permits prototype-mutator bypasses.
-      // Preserve ordinary JavaScript receiver semantics for every own property.
+      // methods of the raw Map/Set target. Run accessors with the public Proxy
+      // as receiver and never bind own functions to the native collection.
       const ownDescriptor = Reflect.getOwnPropertyDescriptor(target, property);
       if (ownDescriptor) {
         if ("get" in ownDescriptor || "set" in ownDescriptor) {
           if (!ownDescriptor.get) return undefined;
           return Reflect.apply(ownDescriptor.get, proxy, []);
         }
-        // Returning the exact value also preserves Proxy invariants for
-        // non-configurable, non-writable own properties. A method call written
-        // as proxy.method() receives the public Proxy as its this value.
         return ownDescriptor.value;
       }
 
-      const value = Reflect.get(target, property, target) as unknown;
-      if (typeof value !== "function" || property === "constructor") return value;
-      // Object.prototype.valueOf would otherwise be bound to the raw target by
-      // the generic method binding below, leaking the underlying collection.
-      // Keep identity-style access on the public proxy.
+      if (property === "size") {
+        const getter = isMap ? NATIVE_MAP_SIZE_GETTER : NATIVE_SET_SIZE_GETTER;
+        return Reflect.apply(getter, target, []);
+      }
+
       if (property === "valueOf") {
         const cached = boundMethods.get(property);
         if (cached) return cached;
@@ -1371,8 +1406,9 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         boundMethods.set(property, guardedValueOf);
         return guardedValueOf;
       }
+
       // Legacy Object.prototype definition helpers must operate through the
-      // public Proxy. Binding them to the raw target would bypass defineProperty.
+      // public Proxy, never against the raw collection target.
       if (property === "__defineGetter__" || property === "__defineSetter__") {
         const cached = boundMethods.get(property);
         if (cached) return cached;
@@ -1390,9 +1426,12 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         boundMethods.set(property, guardedLegacyDefine);
         return guardedLegacyDefine;
       }
-      // Tracked mutators return their bound receiver (the raw target).
-      // Wrap chainable Map.set / Set.add so fluent calls keep the public proxy.
+
+      // Tracked mutators are own overrides on frozen internal prototypes. Bind
+      // those guarded methods to the target for native internal-slot access.
       if (property === "set" || property === "add") {
+        const value = Reflect.get(target, property, target) as unknown;
+        if (typeof value !== "function") return value;
         const cached = boundMethods.get(property);
         if (cached) return cached;
         const guardedMutator = (...args: unknown[]) => {
@@ -1402,19 +1441,19 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         boundMethods.set(property, guardedMutator);
         return guardedMutator;
       }
-      // Map/Set forEach passes its receiver as the callback's third argument.
-      // The method must execute against the real target to satisfy native
-      // collection internal-slot checks, but must never expose that target to
-      // user code: doing so would let callbacks invoke native prototype
-      // mutators without passing through this proxy.
+
+      // Always use the captured native forEach intrinsic, not a possibly
+      // replaced Map.prototype / Set.prototype method. Never expose target as
+      // the callback's third argument.
       if (property === "forEach") {
         const cached = boundMethods.get(property);
         if (cached) return cached;
+        const nativeForEach = isMap ? NATIVE_MAP_FOR_EACH : NATIVE_SET_FOR_EACH;
         const guardedForEach = (callback: unknown, thisArg?: unknown) => {
           if (typeof callback !== "function") {
-            return Reflect.apply(value, target, [callback, thisArg]);
+            return Reflect.apply(nativeForEach, target, [callback, thisArg]);
           }
-          return Reflect.apply(value, target, [
+          return Reflect.apply(nativeForEach, target, [
             (...callbackArgs: unknown[]) => {
               callbackArgs[callbackArgs.length - 1] = proxy;
               return Reflect.apply(callback, thisArg, callbackArgs);
@@ -1425,6 +1464,21 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         boundMethods.set(property, guardedForEach);
         return guardedForEach;
       }
+
+      // Iterators and read-only Map/Set methods are also captured at module
+      // initialization. Global prototype replacement cannot make them return
+      // the raw target or run arbitrary replacement code with target as this.
+      const nativeMethod = getNativeCollectionMethod(isMap, property);
+      if (nativeMethod) {
+        const cached = boundMethods.get(property);
+        if (cached) return cached;
+        const bound = nativeMethod.bind(target) as Function;
+        boundMethods.set(property, bound);
+        return bound;
+      }
+
+      const value = Reflect.get(target, property, target) as unknown;
+      if (typeof value !== "function" || property === "constructor") return value;
       const cached = boundMethods.get(property);
       if (cached) return cached;
       const bound = value.bind(target) as Function;
