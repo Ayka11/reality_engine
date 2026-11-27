@@ -106,3 +106,51 @@ export function runInfinityScaleLODTopologyRevisionRegression(): void {
     throw new Error("Stale transaction rollback removed the newer authoritative LOD chunk");
   }
 }
+
+
+export function runInfinityScaleLODOverlapRejectionRegression(): void {
+  // The low-level LOD state may stage overlapping chunks for diagnostics and
+  // execution-plan rejection tests. Exclusivity belongs to region ownership,
+  // not to the chunk buffer map itself.
+  const state = new InfinityScaleLODState(32);
+  state.ensureChunk("1:0,0,0", 1);
+  state.ensureChunk("0:0,0,0", 0);
+  const revisionBeforeOwnership = state.getRevision();
+  state.bindRegionOwnership("coarse-region", ["1:0,0,0"]);
+  const revisionAfterCoarseOwnership = state.getRevision();
+  if (revisionAfterCoarseOwnership !== revisionBeforeOwnership + 1) {
+    throw new Error("Binding valid coarse region ownership did not advance revision exactly once");
+  }
+
+  let fineOwnershipRejected = false;
+  try {
+    state.bindRegionOwnership("fine-region", ["0:0,0,0"]);
+  } catch (error) {
+    fineOwnershipRejected = error instanceof Error &&
+      error.message.includes("overlapping LOD region ownership");
+  }
+  if (!fineOwnershipRejected || state.getRevision() !== revisionAfterCoarseOwnership ||
+      state.getRegionChunkKeys("coarse-region")?.[0] !== "1:0,0,0" ||
+      state.getRegionChunkKeys("fine-region") !== undefined) {
+    throw new Error("Overlapping region ownership was not rejected atomically");
+  }
+
+  const invalidSnapshot = state.snapshot();
+  invalidSnapshot.regionOwnership = [
+    { regionId: "coarse-region", chunkKeys: ["1:0,0,0"] },
+    { regionId: "fine-region", chunkKeys: ["0:0,0,0"] },
+  ];
+  const revisionBeforeRestore = state.getRevision();
+  let restoreRejected = false;
+  try {
+    state.restore(invalidSnapshot);
+  } catch (error) {
+    restoreRejected = error instanceof Error &&
+      error.message.includes("overlapping LOD region ownership");
+  }
+  if (!restoreRejected || state.getRevision() !== revisionBeforeRestore ||
+      state.getRegionChunkKeys("coarse-region")?.[0] !== "1:0,0,0" ||
+      state.getRegionChunkKeys("fine-region") !== undefined) {
+    throw new Error("Overlapping region ownership restore was not rejected atomically");
+  }
+}
