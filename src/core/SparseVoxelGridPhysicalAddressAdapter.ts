@@ -1,6 +1,6 @@
 import { CellState, CELL_FIELDS } from "./CellState";
 import { SparseVoxelGridPhysicalChunk } from "./SparseVoxelGridPhysicalChunk";
-const MAX_PHYSICAL_DENSE_WINDOW_SAMPLES = 1_048_576;
+const MAX_PHYSICAL_DENSE_WINDOW_SAMPLES = 1_048_576;\nconst CHUNK_SIZE_CELLS = 32 * 32 * 32 * CELL_FIELDS;
 
 import {
   compileSparseVoxelGridPhysicalTopology,
@@ -128,6 +128,72 @@ export class SparseVoxelGridPhysicalAddressAdapter {
 
   get size(): number {
     return this.#chunks.size;
+  }
+
+  /**
+   * Atomically replace the adapter's complete physical topology and owned cell
+   * buffers. The candidate topology is compiled and every chunk is validated
+   * and cloned before the authoritative map, topology index, or revision changes.
+   *
+   * This is an opt-in adapter transaction, not a SparseVoxelGrid runtime
+   * topology publication. Existing CellState handles remain detached snapshots
+   * of their former chunks after replacement and must not be used as live handles.
+   */
+  replaceTopology(
+    expectedRevision: number,
+    chunks: readonly SparseVoxelGridPhysicalChunk[],
+  ): number {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+      throw new RangeError("Physical address adapter expected revision must be a non-negative safe integer");
+    }
+    if (expectedRevision !== this.#revision) {
+      throw new Error(
+        "Physical address adapter revision conflict: expected " + expectedRevision +
+        ", current " + this.#revision,
+      );
+    }
+    if (!Array.isArray(chunks)) {
+      throw new TypeError("Physical topology replacement requires a chunk array");
+    }
+
+    const keys: string[] = [];
+    const seen = new Set<string>();
+    for (const source of chunks) {
+      if (!(source instanceof SparseVoxelGridPhysicalChunk)) {
+        throw new TypeError("Physical topology replacement accepts only physical chunks");
+      }
+      if (seen.has(source.key)) {
+        throw new Error("Physical topology replacement contains duplicate chunk key: " + source.key);
+      }
+      seen.add(source.key);
+      const front = source.buffer;
+      const back = source.backBuffer;
+      if (!(front instanceof Float32Array) || !(back instanceof Float32Array) ||
+          front.length !== CHUNK_SIZE_CELLS || back.length !== CHUNK_SIZE_CELLS ||
+          !front.every(Number.isFinite) || !back.every(Number.isFinite)) {
+        throw new Error("Physical topology replacement contains invalid cell buffers: " + source.key);
+      }
+      keys.push(source.key);
+    }
+
+    // Compile the complete candidate before cloning or touching live state.
+    const topology = compileSparseVoxelGridPhysicalTopology(keys);
+    const nextChunks = new Map<string, SparseVoxelGridPhysicalChunk>();
+    for (const source of chunks) {
+      const copy = new SparseVoxelGridPhysicalChunk(source.key);
+      copy.buffer = source.buffer.slice();
+      copy.backBuffer = source.backBuffer.slice();
+      copy.active = source.active;
+      copy.lastAccessed = source.lastAccessed;
+      copy.addMutationListener(() => { this.#revision += 1; });
+      nextChunks.set(copy.key, copy);
+    }
+
+    // No validation or user callbacks remain after this synchronous publication point.
+    this.#chunks = nextChunks;
+    this.#topology = topology;
+    this.#revision += 1;
+    return this.#revision;
   }
 
   /** Monotonic revision for tracked physical cell and topology-buffer mutations. */
