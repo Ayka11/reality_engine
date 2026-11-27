@@ -1415,11 +1415,6 @@ class MutationTrackedSet<T> extends Set<T> {
   #validateValue?: (value: T) => void;
   constructor(onMutation: () => void, validateValue?: (value: T) => void) {
     super(); this.#onMutation = onMutation; this.#validateValue = validateValue;
-    Object.defineProperties(this, {
-      add: { value: this.add.bind(this), writable: false, configurable: true },
-      delete: { value: this.delete.bind(this), writable: false, configurable: false },
-      clear: { value: this.clear.bind(this), writable: false, configurable: false },
-    });
   }
 
   override add(value: T): this {
@@ -1448,11 +1443,6 @@ class MutationTrackedMap<K, V> extends Map<K, V> {
   #validateEntry?: (key: K, value: V) => void;
   constructor(onMutation: () => void, validateEntry?: (key: K, value: V) => void) {
     super(); this.#onMutation = onMutation; this.#validateEntry = validateEntry;
-    Object.defineProperties(this, {
-      set: { value: this.set.bind(this), writable: false, configurable: true },
-      delete: { value: this.delete.bind(this), writable: false, configurable: false },
-      clear: { value: this.clear.bind(this), writable: false, configurable: false },
-    });
   }
 
   override set(key: K, value: V): this {
