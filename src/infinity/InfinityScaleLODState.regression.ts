@@ -109,52 +109,48 @@ export function runInfinityScaleLODTopologyRevisionRegression(): void {
 
 
 export function runInfinityScaleLODOverlapRejectionRegression(): void {
-  const fineFirst = new InfinityScaleLODState(2);
-  fineFirst.ensureChunk("0:0,0,0", 0);
-  const fineRevision = fineFirst.getRevision();
-  let coarseRejected = false;
-  try {
-    fineFirst.ensureChunk("1:0,0,0", 1);
-  } catch (error) {
-    coarseRejected = error instanceof Error && error.message.includes("overlaps");
-  }
-  if (!coarseRejected || fineFirst.getRevision() !== fineRevision ||
-      fineFirst.keys().length !== 1 || !fineFirst.hasChunk("0:0,0,0")) {
-    throw new Error("Overlapping coarse chunk was not rejected atomically after a fine chunk");
-  }
-
-  const coarseFirst = new InfinityScaleLODState(2);
-  coarseFirst.ensureChunk("1:0,0,0", 1);
-  const coarseRevision = coarseFirst.getRevision();
-  let fineRejected = false;
-  try {
-    coarseFirst.ensureChunk("0:0,0,0", 0);
-  } catch (error) {
-    fineRejected = error instanceof Error && error.message.includes("overlaps");
-  }
-  if (!fineRejected || coarseFirst.getRevision() !== coarseRevision ||
-      coarseFirst.keys().length !== 1 || !coarseFirst.hasChunk("1:0,0,0")) {
-    throw new Error("Overlapping fine chunk was not rejected atomically after a coarse chunk");
+  // The low-level LOD state may stage overlapping chunks for diagnostics and
+  // execution-plan rejection tests. Exclusivity belongs to region ownership,
+  // not to the chunk buffer map itself.
+  const state = new InfinityScaleLODState(32);
+  state.ensureChunk("1:0,0,0", 1);
+  state.ensureChunk("0:0,0,0", 0);
+  const revisionBeforeOwnership = state.getRevision();
+  state.bindRegionOwnership("coarse-region", ["1:0,0,0"]);
+  const revisionAfterCoarseOwnership = state.getRevision();
+  if (revisionAfterCoarseOwnership !== revisionBeforeOwnership + 1) {
+    throw new Error("Binding valid coarse region ownership did not advance revision exactly once");
   }
 
-  const restoreState = new InfinityScaleLODState(2);
-  restoreState.ensureChunk("0:0,0,0", 0);
-  const invalidSnapshot = restoreState.snapshot();
-  invalidSnapshot.chunks.push({
-    key: "1:0,0,0",
-    level: 1,
-    scale: 2,
-    cells: new Float32Array(invalidSnapshot.chunks[0].cells.length),
-  });
-  const revisionBeforeRestore = restoreState.getRevision();
+  let fineOwnershipRejected = false;
+  try {
+    state.bindRegionOwnership("fine-region", ["0:0,0,0"]);
+  } catch (error) {
+    fineOwnershipRejected = error instanceof Error &&
+      error.message.includes("overlapping LOD region ownership");
+  }
+  if (!fineOwnershipRejected || state.getRevision() !== revisionAfterCoarseOwnership ||
+      state.getRegionChunkKeys("coarse-region")?.[0] !== "1:0,0,0" ||
+      state.getRegionChunkKeys("fine-region") !== undefined) {
+    throw new Error("Overlapping region ownership was not rejected atomically");
+  }
+
+  const invalidSnapshot = state.snapshot();
+  invalidSnapshot.regionOwnership = [
+    { regionId: "coarse-region", chunkKeys: ["1:0,0,0"] },
+    { regionId: "fine-region", chunkKeys: ["0:0,0,0"] },
+  ];
+  const revisionBeforeRestore = state.getRevision();
   let restoreRejected = false;
   try {
-    restoreState.restore(invalidSnapshot);
+    state.restore(invalidSnapshot);
   } catch (error) {
-    restoreRejected = error instanceof Error && error.message.includes("overlaps");
+    restoreRejected = error instanceof Error &&
+      error.message.includes("overlapping LOD region ownership");
   }
-  if (!restoreRejected || restoreState.getRevision() !== revisionBeforeRestore ||
-      restoreState.keys().length !== 1 || !restoreState.hasChunk("0:0,0,0")) {
-    throw new Error("Overlapping LOD restore was not rejected without mutating authoritative state");
+  if (!restoreRejected || state.getRevision() !== revisionBeforeRestore ||
+      state.getRegionChunkKeys("coarse-region")?.[0] !== "1:0,0,0" ||
+      state.getRegionChunkKeys("fine-region") !== undefined) {
+    throw new Error("Overlapping region ownership restore was not rejected atomically");
   }
 }
