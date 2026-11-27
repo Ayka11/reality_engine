@@ -47,9 +47,9 @@ export const INFINITY_SCALE_FIELD_SEMANTICS: readonly InfinityScaleFieldSemantic
   { field: F.MEM_FIELD, name: "mem_field", policy: "extensive", conservation: "sum", status: "baseline-model", rationale: "Current model treats memory field as volume-additive." },
   { field: F.AGENT_MARK, name: "agent_mark", policy: "discrete", conservation: "majority", status: "baseline-model", rationale: "Agent occupancy marker is discrete and topology-sensitive." },
   { field: F.ENTITY_ID, name: "entity_id", policy: "discrete", conservation: "majority", status: "baseline-model", rationale: "Entity identity is discrete; mixed-LOD topology must override naive majority semantics." },
-  { field: F.SPARE_1, name: "spare_1", policy: "unsupported", conservation: "none", status: "baseline-model", rationale: "No transfer semantics have been defined." },
-  { field: F.SPARE_2, name: "spare_2", policy: "unsupported", conservation: "none", status: "baseline-model", rationale: "No transfer semantics have been defined." },
-  { field: F.SPARE_3, name: "spare_3", policy: "unsupported", conservation: "none", status: "baseline-model", rationale: "No transfer semantics have been defined." },
+  { field: F.VELOCITY_X, name: "velocity_x", policy: "intensive", conservation: "average", status: "baseline-model", rationale: "Current simulation stores velocity as a local vector component; baseline LOD restriction averages components and prolongation preserves the coarse value." },
+  { field: F.VELOCITY_Y, name: "velocity_y", policy: "intensive", conservation: "average", status: "baseline-model", rationale: "Current simulation stores velocity as a local vector component; baseline LOD restriction averages components and prolongation preserves the coarse value." },
+  { field: F.VELOCITY_Z, name: "velocity_z", policy: "intensive", conservation: "average", status: "baseline-model", rationale: "Current simulation stores velocity as a local vector component; baseline LOD restriction averages components and prolongation preserves the coarse value." },
 ] as const;
 
 const BY_FIELD = new Map(
