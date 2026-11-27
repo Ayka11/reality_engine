@@ -201,8 +201,8 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   expectRejected("native Set.prototype.add bypass through dirtyChunks.forEach receiver", () =>
     grid.dirtyChunks.forEach((_key, _sameKey, collection) =>
       Set.prototype.add.call(collection, "1,0,0")));
-  if (grid.chunkOwners.size !== 1 || grid.chunkOwners.get("0,0,0") !== "owner" ||
-      grid.dirtyChunks.size !== 1 || !grid.dirtyChunks.has("0,0,0") ||
+  if (Number(grid.chunkOwners.size) !== 1 || grid.chunkOwners.get("0,0,0") !== "owner" ||
+      Number(grid.dirtyChunks.size) !== 1 || !grid.dirtyChunks.has("0,0,0") ||
       grid.mutationRevision !== forEachRevision) {
     throw new Error("forEach callback exposed a raw tracked collection or changed state");
   }
