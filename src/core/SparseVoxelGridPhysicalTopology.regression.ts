@@ -536,8 +536,8 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
         typeof grid.dirtyChunks.toString() !== "string" ||
         typeof grid.dirtyChunks.toLocaleString() !== "string" ||
         typeof grid.dirtyChunks.hasOwnProperty("missing") !== "boolean" ||
-        grid.chunks.__proto__ !== Object.getPrototypeOf(grid.chunks) ||
-        grid.dirtyChunks.__proto__ !== Object.getPrototypeOf(grid.dirtyChunks)) {
+        Reflect.get(grid.chunks, "__proto__") !== Object.getPrototypeOf(grid.chunks) ||
+        Reflect.get(grid.dirtyChunks, "__proto__") !== Object.getPrototypeOf(grid.dirtyChunks)) {
       throw new Error("Tracked collection Proxy exposed its raw target through a replaced Object prototype helper");
     }
   } finally {
