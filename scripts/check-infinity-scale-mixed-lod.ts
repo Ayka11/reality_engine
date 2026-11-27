@@ -11,7 +11,9 @@ import { runInfinityScaleChunkExecutionContextBoundaryRegression } from "../src/
 import { runInfinityScaleLODStateRecoveryRegression } from "../src/infinity/InfinityScaleLODStateRecovery.regression";
 import { runInfinityScaleExecutionAdapterBoundaryRegression } from "../src/infinity/InfinityScaleExecutionAdapter.regression";
 import { runInfinityScaleLODTransferInvariantRegression } from "../src/infinity/InfinityScaleLODTransfer.regression";
-import { runInfinityScaleLODResetInvalidationRegression, runInfinityScaleLODTopologyRevisionRegression } from "../src/infinity/InfinityScaleLODState.regression";
+import { runInfinityScaleLODPhysicalCellBatchRegression } from "../src/infinity/InfinityScaleLODPhysicalCellBatch.regression";
+import { runInfinityScaleDenseWindowReductionRegression } from "../src/infinity/InfinityScaleDenseWindowReduction.regression";
+import { runInfinityScaleLODResetInvalidationRegression, runInfinityScaleLODTopologyRevisionRegression, runInfinityScaleLODOverlapRejectionRegression } from "../src/infinity/InfinityScaleLODState.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "../src/infinity/InfinityScaleLODMultiFrame.regression";
 import { runInfinityScaleMixedLODMultiFrameRegression } from "../src/infinity/InfinityScaleMixedLODMultiFrame.regression";
 
@@ -25,10 +27,13 @@ runInfinityScaleChunkExecutionContextBoundaryRegression();
 runInfinityScaleGlobalLODTransactionRegression();
 runInfinityScaleExecutionAdapterBoundaryRegression();
 runInfinityScaleLODTransferInvariantRegression();
+runInfinityScaleLODPhysicalCellBatchRegression();
+runInfinityScaleDenseWindowReductionRegression();
 runInfinityScaleLODStateRecoveryRegression();
 runInfinityScaleLODResetInvalidationRegression();
 runInfinityScaleLODTopologyRevisionRegression();
+runInfinityScaleLODOverlapRejectionRegression();
 runInfinityScaleLODMultiFrameRegression();
 runInfinityScaleMixedLODMultiFrameRegression();
 
-console.log("PASS: Infinity Scale mixed-LOD CPU, rollback, multi-frame commits, reset/topology revision invalidation, mapper, chunk context, LOD transaction, execution adapter, transfer invariants, and state recovery regressions");
+console.log("PASS: Infinity Scale mixed-LOD CPU, rollback, multi-frame commits, reset/topology revision invalidation, overlap rejection, mapper, chunk context, LOD transaction, execution adapter, transfer invariants, and state recovery regressions");

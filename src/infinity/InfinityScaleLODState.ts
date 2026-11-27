@@ -16,6 +16,14 @@ export interface InfinityScaleLODRegionOwnershipSnapshot {
   chunkKeys: string[];
 }
 
+/** One complete physical cell vector prepared for an atomic state batch. */
+export interface InfinityScaleLODPhysicalCellWrite {
+  readonly chunkKey: string;
+  readonly cellIndex: number;
+  readonly level: number;
+  readonly values: ArrayLike<number>;
+}
+
 /** Deep snapshot of hierarchical cells and region ownership for failed-frame recovery. */
 export interface InfinityScaleLODStateSnapshot {
   chunks: InfinityScaleLODChunkState[];
@@ -533,6 +541,104 @@ export class InfinityScaleLODState {
       throw new Error(`LOD transaction target level mismatch for ${key}: expected ${state.level}, received ${level}`);
     }
     this.writeBaseCellUnchecked(key, level, baseX, baseY, baseZ, source);
+  }
+
+  /**
+   * Atomically publish a detached batch of complete physical cell vectors.
+   *
+   * All addresses, revisions, uniqueness constraints and Float32 payloads are
+   * validated before the first authoritative byte is changed. The method
+   * snapshots each affected chunk and restores it if an unexpected write
+   * failure occurs. A successful batch advances the state revision exactly
+   * once; an empty batch is a no-op.
+   */
+  writePhysicalCellBatchForTransaction(
+    expectedRevision: number,
+    updates: ReadonlyArray<InfinityScaleLODPhysicalCellWrite>,
+  ): number {
+    this.assertRevision(expectedRevision);
+    if (!Array.isArray(updates)) {
+      throw new TypeError("Infinity Scale physical cell batch requires an update array");
+    }
+    if (updates.length > 4096) {
+      throw new RangeError("Infinity Scale physical cell batch exceeds the 4096-cell limit");
+    }
+    if (updates.length === 0) return this.revision;
+
+    const seen = new Set<string>();
+    const prepared: Array<{
+      state: InfinityScaleLODChunkState;
+      offset: number;
+      values: Float32Array;
+      previous: Float32Array;
+    }> = [];
+
+    // Preflight the entire batch without mutating authoritative state.
+    for (let index = 0; index < updates.length; index++) {
+      const update = updates[index];
+      if (!update || typeof update.chunkKey !== "string" ||
+          !Number.isSafeInteger(update.cellIndex) || update.cellIndex < 0 ||
+          !Number.isSafeInteger(update.level) || update.level < 0 || update.level > 30) {
+        throw new Error("Infinity Scale physical cell batch contains an invalid address at index " + index);
+      }
+      const bounds = getInfinityScaleChunkBounds(update.chunkKey, this.chunkSize);
+      if (bounds.level !== update.level) {
+        throw new Error("Infinity Scale physical cell batch key/level mismatch for " + update.chunkKey);
+      }
+      const cellCount = this.chunkSize ** 3;
+      if (update.cellIndex >= cellCount) {
+        throw new RangeError("Infinity Scale physical cell batch index is outside chunk " + update.chunkKey);
+      }
+      const identity = update.chunkKey + "#" + update.cellIndex;
+      if (seen.has(identity)) {
+        throw new Error("Infinity Scale physical cell batch contains duplicate target " + identity);
+      }
+      seen.add(identity);
+
+      const state = this.states.get(update.chunkKey);
+      if (!state || state.level !== update.level || state.scale !== 2 ** update.level) {
+        throw new Error("Infinity Scale physical cell batch target chunk is missing or inconsistent: " + update.chunkKey);
+      }
+      const values = copyFiniteFloat32ArrayLike(
+        update.values, CELL_FIELDS, "Infinity Scale physical cell batch " + identity,
+      );
+      const offset = update.cellIndex * CELL_FIELDS;
+      prepared.push({
+        state,
+        offset,
+        values,
+        // Only the target cell is backed up. Snapshotting an entire 32^3 chunk
+        // for every touched chunk would make sparse batches needlessly huge.
+        previous: state.cells.slice(offset, offset + CELL_FIELDS),
+      });
+    }
+
+    // Revision is checked again immediately before publication. JavaScript
+    // execution is synchronous, but this makes the commit boundary explicit.
+    this.assertRevision(expectedRevision);
+    try {
+      for (const update of prepared) {
+        update.state.cells.set(update.values, update.offset);
+      }
+    } catch (error) {
+      try {
+        // Restore every target in reverse publication order, including the
+        // cell whose native typed-array write may have partially completed.
+        for (let index = prepared.length - 1; index >= 0; index--) {
+          const update = prepared[index];
+          update.state.cells.set(update.previous, update.offset);
+        }
+      } catch (rollbackError) {
+        throw new Error(
+          "Infinity Scale physical cell batch publication failed (" + String(error) +
+          "); cell-level rollback also failed (" + String(rollbackError) + ")",
+        );
+      }
+      throw new Error("Infinity Scale physical cell batch publication failed and was rolled back: " + String(error));
+    }
+
+    this.revision += 1;
+    return this.revision;
   }
 
   private writeBaseCellUnchecked(
