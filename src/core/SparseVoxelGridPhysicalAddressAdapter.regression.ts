@@ -116,6 +116,43 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
       }
     }
   }
+  const fullCoarseCoverage = adapter.analyzeDenseWindowCoverage(coarseWindow);
+  if (!fullCoarseCoverage.complete || fullCoarseCoverage.incompleteCellCount !== 0 ||
+      fullCoarseCoverage.cells.length !== 1 ||
+      fullCoarseCoverage.cells[0].expectedBaseSamples !== 8 ||
+      fullCoarseCoverage.cells[0].observedBaseSamples !== 8 ||
+      !fullCoarseCoverage.cells[0].complete ||
+      fullCoarseCoverage.cells[0].denseIndices.join(",") !== "0,1,2,3,4,5,6,7" ||
+      !Object.isFrozen(fullCoarseCoverage) ||
+      !Object.isFrozen(fullCoarseCoverage.cells[0].denseIndices)) {
+    throw new Error("Physical dense-window coverage did not recognize complete coarse-cell coverage");
+  }
+  const partialCoarseCoverage = adapter.analyzeDenseWindowCoverage({
+    width: 1, height: 1, depth: 1, origin: { x: 2, y: 4, z: 6 },
+  });
+  if (partialCoarseCoverage.complete || partialCoarseCoverage.incompleteCellCount !== 1 ||
+      partialCoarseCoverage.cells.length !== 1 ||
+      partialCoarseCoverage.cells[0].expectedBaseSamples !== 8 ||
+      partialCoarseCoverage.cells[0].observedBaseSamples !== 1 ||
+      partialCoarseCoverage.cells[0].complete) {
+    throw new Error("Physical dense-window coverage treated a partial coarse-cell intersection as complete");
+  }
+  const fineCoverage = adapter.analyzeDenseWindowCoverage({
+    width: 1, height: 1, depth: 1, origin: { x: 64, y: 0, z: 0 },
+  });
+  if (!fineCoverage.complete || fineCoverage.cells.length !== 1 ||
+      fineCoverage.cells[0].level !== 0 ||
+      fineCoverage.cells[0].expectedBaseSamples !== 1 ||
+      fineCoverage.cells[0].observedBaseSamples !== 1) {
+    throw new Error("Physical dense-window coverage did not recognize one-to-one level-zero coverage");
+  }
+  const missingCoverage = adapter.analyzeDenseWindowCoverage({
+    width: 1, height: 1, depth: 1, origin: { x: 96, y: 0, z: 0 },
+  });
+  if (!missingCoverage.complete || missingCoverage.cells.length !== 0 ||
+      missingCoverage.incompleteCellCount !== 0) {
+    throw new Error("Physical dense-window coverage incorrectly created reduction targets for missing topology");
+  }
   coarseProjection.values[F.ENERGY] = -123;
   if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
     throw new Error("Mutating a detached dense-window projection changed physical storage");

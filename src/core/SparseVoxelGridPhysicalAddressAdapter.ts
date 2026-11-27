@@ -57,6 +57,29 @@ export interface SparseVoxelGridDenseWindowProjection {
   readonly coarseCellAliases: readonly SparseVoxelGridDenseCellAliasGroup[];
 }
 
+/** Coverage of one stored physical cell by samples in a dense window. */
+export interface SparseVoxelGridDenseCellCoverage {
+  readonly chunkKey: string;
+  readonly cellIndex: number;
+  readonly level: number;
+  readonly expectedBaseSamples: number;
+  readonly observedBaseSamples: number;
+  readonly denseIndices: readonly number[];
+  readonly complete: boolean;
+}
+
+/** Immutable coverage report; incomplete coarse cells are never reduction-ready. */
+export interface SparseVoxelGridDenseWindowCoverage {
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly origin: Readonly<{ x: number; y: number; z: number }>;
+  readonly revision: number;
+  readonly cells: readonly SparseVoxelGridDenseCellCoverage[];
+  readonly complete: boolean;
+  readonly incompleteCellCount: number;
+}
+
 /**
  * Maps a dense-window sample to its physical stored-cell address without
  * exposing mutable buffers or defining a write/reduction policy.
@@ -176,6 +199,87 @@ export class SparseVoxelGridPhysicalAddressAdapter {
     const physical = this.resolve(baseX, baseY, baseZ);
     if (!physical) return null;
     return Object.freeze({ denseIndex, localX, localY, localZ, baseX, baseY, baseZ, physical });
+  }
+
+  /**
+   * Report how much of each touched physical cell is represented by a dense
+   * window. A level-L cell requires (2^L)^3 base samples; partial intersections
+   * are explicitly incomplete and must not be reduced or written as if absent
+   * samples were zero. This method is metadata-only and never mutates buffers.
+   */
+  analyzeDenseWindowCoverage(window: SparseVoxelGridDenseWindow): SparseVoxelGridDenseWindowCoverage {
+    if (!window || typeof window !== "object" ||
+        ![window.width, window.height, window.depth].every(Number.isSafeInteger) ||
+        window.width <= 0 || window.height <= 0 || window.depth <= 0 ||
+        !window.origin ||
+        ![window.origin.x, window.origin.y, window.origin.z].every(Number.isSafeInteger)) {
+      throw new RangeError("Sparse physical dense window requires positive safe dimensions and an integer origin");
+    }
+
+    const revision = this.#revision;
+    const groups = new Map<string, {
+      chunkKey: string;
+      cellIndex: number;
+      level: number;
+      expectedBaseSamples: number;
+      denseIndices: number[];
+    }>();
+
+    for (let z = 0; z < window.depth; z++)
+    for (let y = 0; y < window.height; y++)
+    for (let x = 0; x < window.width; x++) {
+      const address = this.resolveDenseWindowCell(x, y, z, window);
+      if (!address) continue;
+      const level = address.physical.chunk.level;
+      const scale = 2 ** level;
+      const expectedBaseSamples = scale * scale * scale;
+      if (!Number.isSafeInteger(expectedBaseSamples) || expectedBaseSamples <= 0) {
+        throw new RangeError("Physical dense-window coverage exceeds safe LOD sample geometry");
+      }
+      const key = address.physical.chunk.key + "#" + address.physical.cellIndex;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          chunkKey: address.physical.chunk.key,
+          cellIndex: address.physical.cellIndex,
+          level,
+          expectedBaseSamples,
+          denseIndices: [],
+        };
+        groups.set(key, group);
+      } else if (group.level !== level || group.expectedBaseSamples !== expectedBaseSamples) {
+        throw new Error("Physical dense-window coverage identity has inconsistent LOD metadata");
+      }
+      group.denseIndices.push(address.denseIndex);
+    }
+
+    if (this.#revision !== revision) {
+      throw new Error("Physical dense-window coverage observed a concurrent adapter mutation");
+    }
+
+    const cells = Object.freeze([...groups.values()].map(group => {
+      const observedBaseSamples = group.denseIndices.length;
+      return Object.freeze({
+        chunkKey: group.chunkKey,
+        cellIndex: group.cellIndex,
+        level: group.level,
+        expectedBaseSamples: group.expectedBaseSamples,
+        observedBaseSamples,
+        denseIndices: Object.freeze(group.denseIndices.slice()),
+        complete: observedBaseSamples === group.expectedBaseSamples,
+      });
+    }));
+    const incompleteCellCount = cells.filter(cell => !cell.complete).length;
+    return Object.freeze({
+      width: window.width,
+      height: window.height,
+      depth: window.depth,
+      origin: Object.freeze({ x: window.origin.x, y: window.origin.y, z: window.origin.z }),
+      revision,
+      cells,
+      complete: incompleteCellCount === 0,
+      incompleteCellCount,
+    });
   }
 
   /**
