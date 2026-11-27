@@ -42,6 +42,11 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
   if (!preparedCoarseCell || preparedCoarseCell.get(F.ENERGY) !== 0) {
     throw new Error("Physical address adapter did not expose the independent coarse back buffer");
   }
+  // Give every slot a distinct value so the projection proves the complete
+  // 24-field cell layout is copied, not only the commonly inspected fields.
+  for (let field = 0; field < CELL_FIELDS; field++) {
+    preparedCoarseCell.set(field, 2000 + field);
+  }
   preparedCoarseCell.set(F.ENERGY, 72);
   if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 44 ||
       adapter.getBackCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
@@ -101,8 +106,14 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
     throw new Error("Physical dense-window projection failed to expose detached values and coarse-cell alias groups");
   }
   for (let denseIndex = 0; denseIndex < 8; denseIndex++) {
-    if (coarseProjection.values[denseIndex * CELL_FIELDS + F.ENERGY] !== 72) {
-      throw new Error("Physical dense-window projection failed to replicate a coarse front-buffer value");
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const expected = field === F.ENERGY ? 72 : 2000 + field;
+      if (coarseProjection.values[denseIndex * CELL_FIELDS + field] !== expected) {
+        throw new Error(
+          "Physical dense-window projection failed to copy field " + field +
+          " for coarse alias sample " + denseIndex,
+        );
+      }
     }
   }
   coarseProjection.values[F.ENERGY] = -123;
