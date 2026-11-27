@@ -1425,13 +1425,6 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         boundMethods.set(property, guardedForEach);
         return guardedForEach;
       }
-      // Preserve exact values for any future non-configurable, non-writable
-      // own function properties to satisfy Proxy invariants. Tracked mutators
-      // intentionally live on prototypes so descriptors cannot expose a
-      // bound raw-target function.
-      const ownDescriptor = Reflect.getOwnPropertyDescriptor(target, property);
-      if (ownDescriptor && ownDescriptor.configurable === false &&
-          ownDescriptor.writable === false) return value;
       const cached = boundMethods.get(property);
       if (cached) return cached;
       const bound = value.bind(target) as Function;
