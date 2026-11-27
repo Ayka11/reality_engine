@@ -99,7 +99,8 @@
     "test:world-observability-ownership": "npx --yes tsx scripts/check-world-observability-ownership.ts",
     "test:world-field-sample-ownership": "npx --yes tsx scripts/check-world-field-sample-ownership.ts",
     "test:scientific-field-registry-ownership": "npx --yes tsx scripts/check-scientific-field-registry-ownership.ts",
-    "test:world-field-metrics": "npx --yes tsx scripts/check-world-field-metrics.ts"
+    "test:world-field-metrics": "npx --yes tsx scripts/check-world-field-metrics.ts",
+    "test:sparse-voxel-grid-physical-topology": "npx --yes tsx scripts/check-sparse-voxel-grid-physical-topology.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

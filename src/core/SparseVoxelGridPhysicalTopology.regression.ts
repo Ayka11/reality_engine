@@ -133,6 +133,474 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   // authoritative map. Repeated reads reuse the snapshot; cell writes do not
   // invalidate topology, while structural map changes do.
   const grid = new SparseVoxelGrid(1, 1, 1);
+  const guardedTopology = grid.physicalTopology;
+  const guardedRevision = grid.mutationRevision;
+  const chunksPrototype = Object.getPrototypeOf(grid.chunks);
+  const ownersPrototype = Object.getPrototypeOf(grid.chunkOwners);
+  const dirtyPrototype = Object.getPrototypeOf(grid.dirtyChunks);
+
+  // Replacing a tracked collection's prototype would expose native mutators
+  // and bypass validation/revision hooks. Both throwing and reflective APIs
+  // must reject the attempt without changing any collection.
+  expectRejected("prototype replacement on chunks", () =>
+    Object.setPrototypeOf(grid.chunks, Map.prototype));
+  expectRejected("prototype replacement on chunk owners", () =>
+    Object.setPrototypeOf(grid.chunkOwners, Map.prototype));
+  expectRejected("prototype replacement on dirty chunks", () =>
+    Object.setPrototypeOf(grid.dirtyChunks, Set.prototype));
+  if (Reflect.setPrototypeOf(grid.chunks, Map.prototype) ||
+      Reflect.setPrototypeOf(grid.chunkOwners, Map.prototype) ||
+      Reflect.setPrototypeOf(grid.dirtyChunks, Set.prototype)) {
+    throw new Error("Tracked collection accepted reflective prototype replacement");
+  }
+
+  // A native prototype call normally bypasses an overridden subclass method.
+  // The public collection proxies must reject these calls before changing data.
+  expectRejected("native Map.prototype.set bypass on chunks", () =>
+    Map.prototype.set.call(grid.chunks, "1,0,0", new Chunk(1, 0, 0)));
+  expectRejected("native Map.prototype.delete bypass on chunks", () =>
+    Map.prototype.delete.call(grid.chunks, "0,0,0"));
+  expectRejected("native Map.prototype.clear bypass on chunks", () =>
+    Map.prototype.clear.call(grid.chunks));
+  expectRejected("native Map.prototype.set bypass on chunk owners", () =>
+    Map.prototype.set.call(grid.chunkOwners, "0,0,0", "owner"));
+  expectRejected("native Map.prototype.clear bypass on chunk owners", () =>
+    Map.prototype.clear.call(grid.chunkOwners));
+  expectRejected("native Set.prototype.add bypass on dirty chunks", () =>
+    Set.prototype.add.call(grid.dirtyChunks, "0,0,0"));
+  expectRejected("native Set.prototype.delete bypass on dirty chunks", () =>
+    Set.prototype.delete.call(grid.dirtyChunks, "0,0,0"));
+  expectRejected("native Set.prototype.clear bypass on dirty chunks", () =>
+    Set.prototype.clear.call(grid.dirtyChunks));
+
+  // Inherited Object.prototype methods must not leak the wrapped target.
+  // valueOf is normally bound by the proxy's generic method path, so it needs
+  // an explicit proxy-preserving implementation just like forEach.
+  const chunksValue = grid.chunks.valueOf();
+  const ownersValue = grid.chunkOwners.valueOf();
+  const dirtyValue = grid.dirtyChunks.valueOf();
+  if (chunksValue !== grid.chunks || ownersValue !== grid.chunkOwners ||
+      dirtyValue !== grid.dirtyChunks) {
+    throw new Error("Tracked collection valueOf exposed an underlying target");
+  }
+  expectRejected("native Map.prototype.set bypass through chunks.valueOf", () =>
+    Map.prototype.set.call(chunksValue, "1,0,0", new Chunk(1, 0, 0)));
+  expectRejected("native Map.prototype.set bypass through chunkOwners.valueOf", () =>
+    Map.prototype.set.call(ownersValue, "0,0,0", "bypass"));
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.valueOf", () =>
+    Set.prototype.add.call(dirtyValue, "1,0,0"));
+
+  // Native forEach must not leak the wrapped target as its third callback
+  // argument. Otherwise a callback can call Map/Set prototype mutators on
+  // that raw instance and bypass the public proxy.
+  expectRejected("native Map.prototype.set bypass through chunks.forEach receiver", () =>
+    grid.chunks.forEach((_chunk, _key, collection) =>
+      Map.prototype.set.call(collection, "1,0,0", new Chunk(1, 0, 0))));
+  if (!(grid.chunks instanceof Map) || !(grid.chunkOwners instanceof Map) ||
+      !(grid.dirtyChunks instanceof Set) ||
+      grid.chunks.size !== 1 || !grid.chunks.has("0,0,0") ||
+      grid.chunkOwners.size !== 0 || grid.dirtyChunks.size !== 0 ||
+      Object.getPrototypeOf(grid.chunks) !== chunksPrototype ||
+      Object.getPrototypeOf(grid.chunkOwners) !== ownersPrototype ||
+      Object.getPrototypeOf(grid.dirtyChunks) !== dirtyPrototype ||
+      grid.mutationRevision !== guardedRevision || grid.physicalTopology !== guardedTopology) {
+    throw new Error("Native Map/Set prototype bypass changed tracked collection state or revision");
+  }
+
+  // Mutator implementations must not be own properties: property
+  // descriptors would otherwise expose the bound raw-target functions.
+  for (const [collection, methods] of [
+    [grid.chunks, ["set", "delete", "clear"]],
+    [grid.chunkOwners, ["set", "delete", "clear"]],
+    [grid.dirtyChunks, ["add", "delete", "clear"]],
+  ] as const) {
+    for (const method of methods) {
+      if (Object.getOwnPropertyDescriptor(collection, method) !== undefined) {
+        throw new Error(`Tracked collection exposes own mutator descriptor: ${method}`);
+      }
+    }
+  }
+
+  // Legacy Object.prototype helpers and the inherited __proto__ setter
+  // must not bypass the public Proxy's mutation and descriptor guards.
+  const legacyEscapeCases = [
+    { collection: grid.chunks, mutator: "set", prototype: chunksPrototype },
+    { collection: grid.chunkOwners, mutator: "set", prototype: ownersPrototype },
+    { collection: grid.dirtyChunks, mutator: "add", prototype: dirtyPrototype },
+  ] as const;
+  for (const candidate of legacyEscapeCases) {
+    const collection = candidate.collection as unknown as object & {
+      __defineGetter__(key: PropertyKey, getter: () => unknown): void;
+      __defineSetter__(key: PropertyKey, setter: (value: unknown) => void): void;
+    };
+    if (Reflect.set(collection, "__proto__", Object.prototype) ||
+        Object.getPrototypeOf(collection) !== candidate.prototype) {
+      throw new Error("Tracked collection allowed __proto__ replacement");
+    }
+    expectRejected("legacy __defineGetter__ mutator shadow", () =>
+      collection.__defineGetter__(candidate.mutator, () => () => collection));
+    expectRejected("legacy __defineSetter__ mutator shadow", () =>
+      collection.__defineSetter__(candidate.mutator, () => undefined));
+    expectRejected("native Object.prototype.__defineGetter__ mutator shadow", () =>
+      Reflect.apply(
+        Reflect.get(Object.prototype, "__defineGetter__") as (...args: unknown[]) => unknown,
+        collection,
+        [candidate.mutator, () => () => collection],
+      ));
+    expectRejected("native Object.prototype.__defineSetter__ mutator shadow", () =>
+      Reflect.apply(
+        Reflect.get(Object.prototype, "__defineSetter__") as (...args: unknown[]) => unknown,
+        collection,
+        [candidate.mutator, () => undefined],
+      ));
+    if (Object.getOwnPropertyDescriptor(collection, candidate.mutator) !== undefined ||
+        Object.getPrototypeOf(collection) !== candidate.prototype) {
+      throw new Error("Legacy property definition changed a tracked collection");
+    }
+  }
+
+  // Own user-defined methods and accessors must observe the public Proxy,
+  // never the raw Map/Set target. Otherwise an own property can return its
+  // receiver and reopen native prototype mutation bypasses.
+  for (const candidate of legacyEscapeCases) {
+    const collection = candidate.collection as unknown as Map<string, unknown> & {
+      __receiverProbe__?: () => unknown;
+      __getterReceiverProbe__?: unknown;
+      __setterReceiverProbe__?: unknown;
+    };
+    const trackedPrototype = Object.getPrototypeOf(collection);
+    const originalMutator = Reflect.get(trackedPrototype, candidate.mutator);
+    if (!Object.isFrozen(trackedPrototype) || typeof originalMutator !== "function") {
+      throw new Error("Tracked collection prototype is not frozen with its guarded mutator");
+    }
+    expectRejected("shared prototype mutator replacement", () =>
+      Object.defineProperty(trackedPrototype, candidate.mutator, {
+        configurable: true,
+        writable: true,
+        value: candidate.mutator === "add" ? Set.prototype.add : Map.prototype.set,
+      }));
+    expectRejected("shared prototype-chain replacement", () =>
+      Object.setPrototypeOf(trackedPrototype, Object.prototype));
+    if (Reflect.get(trackedPrototype, candidate.mutator) !== originalMutator) {
+      throw new Error("Tracked collection prototype mutator changed after rejected replacement");
+    }
+    Object.defineProperty(collection, "__receiverProbe__", {
+      configurable: true,
+      value: function (this: unknown) { return this; },
+    });
+    const ownMethod = collection.__receiverProbe__;
+    if (typeof ownMethod !== "function") {
+      throw new Error("Own collection receiver probe was not installed");
+    }
+    const methodReceiver = Reflect.apply(ownMethod, collection, []);
+    if (methodReceiver !== collection) {
+      throw new Error("Own collection method did not receive the public Proxy");
+    }
+    expectRejected("native mutator bypass through own method receiver", () =>
+      candidate.mutator === "add"
+        ? Set.prototype.add.call(methodReceiver, "proxy-own-method-bypass")
+        : Map.prototype.set.call(methodReceiver, "proxy-own-method-bypass", "bypass"));
+
+    Object.defineProperty(collection, "__getterReceiverProbe__", {
+      configurable: true,
+      get() { return this; },
+    });
+    const getterReceiver = collection.__getterReceiverProbe__;
+    if (getterReceiver !== collection) {
+      throw new Error("Own collection getter received or exposed the raw target");
+    }
+    expectRejected("native mutator bypass through own getter receiver", () =>
+      candidate.mutator === "add"
+        ? Set.prototype.add.call(getterReceiver, "proxy-own-getter-bypass")
+        : Map.prototype.set.call(getterReceiver, "proxy-own-getter-bypass", "bypass"));
+
+    let setterReceiver: unknown;
+    Object.defineProperty(collection, "__setterReceiverProbe__", {
+      configurable: true,
+      set: function (this: unknown, _value: unknown) { setterReceiver = this; },
+    });
+    if (!Reflect.set(collection, "__setterReceiverProbe__", "trigger") ||
+        setterReceiver !== collection) {
+      throw new Error("Own collection setter received or exposed the raw target");
+    }
+    expectRejected("native mutator bypass through own setter receiver", () =>
+      candidate.mutator === "add"
+        ? Set.prototype.add.call(setterReceiver, "proxy-own-setter-bypass")
+        : Map.prototype.set.call(setterReceiver, "proxy-own-setter-bypass", "bypass"));
+
+    delete (collection as unknown as Record<string, unknown>).__receiverProbe__;
+    delete (collection as unknown as Record<string, unknown>).__getterReceiverProbe__;
+    delete (collection as unknown as Record<string, unknown>).__setterReceiverProbe__;
+  }
+
+  // Captured native intrinsics must remain authoritative even if another
+  // script replaces Map/Set prototype methods or accessors at runtime.
+  const nativeChunk = grid.chunks.get("0,0,0");
+  if (!nativeChunk) throw new Error("Native intrinsic regression requires a seeded chunk");
+
+  const mapGetDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "get");
+  const mapHasDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "has");
+  const mapSetDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "set");
+  const mapDeleteDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "delete");
+  const mapClearDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "clear");
+  const mapEntriesDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "entries");
+  const mapForEachDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "forEach");
+  const mapSizeDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "size");
+  const mapIteratorDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, Symbol.iterator);
+  if (!mapGetDescriptor || !mapHasDescriptor || !mapSetDescriptor ||
+      !mapDeleteDescriptor || !mapClearDescriptor || !mapEntriesDescriptor ||
+      !mapForEachDescriptor || !mapSizeDescriptor || !mapIteratorDescriptor) {
+    throw new Error("Native Map intrinsic descriptors are unavailable for the tampering regression");
+  }
+  try {
+    Object.defineProperty(Map.prototype, "get", {
+      ...mapGetDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "has", {
+      ...mapHasDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "set", {
+      ...mapSetDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "delete", {
+      ...mapDeleteDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "clear", {
+      ...mapClearDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "entries", {
+      ...mapEntriesDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "forEach", {
+      ...mapForEachDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "size", {
+      ...mapSizeDescriptor,
+      get: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, Symbol.iterator, {
+      ...mapIteratorDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    if (grid.chunks.get("0,0,0") !== nativeChunk ||
+        typeof grid.chunks.size !== "number" ||
+        typeof grid.chunks.entries().next !== "function" ||
+        typeof grid.chunks[Symbol.iterator]().next !== "function") {
+      throw new Error("Tracked Map Proxy used a replaced native Map prototype intrinsic");
+    }
+    let mapForEachCount = 0;
+    const mapForEachResult = grid.chunks.forEach(() => { mapForEachCount++; });
+    if (mapForEachResult !== undefined || mapForEachCount !== grid.chunks.size) {
+      throw new Error("Tracked Map Proxy exposed its target through a replaced forEach intrinsic");
+    }
+    const revisionBeforeMapWrites = grid.mutationRevision;
+    const prototypeProbeChunk = new Chunk(99, 0, 0);
+    if (grid.chunks.set("99,0,0", prototypeProbeChunk) !== grid.chunks ||
+        grid.chunks.get("99,0,0") !== prototypeProbeChunk ||
+        !grid.chunks.delete("99,0,0") ||
+        grid.mutationRevision <= revisionBeforeMapWrites) {
+      throw new Error("Tracked Map mutators depended on replaced native Map prototype methods");
+    }
+    grid.chunkOwners.set("0,0,0", "native-prototype-test");
+    grid.chunkOwners.clear();
+    if (grid.chunkOwners.size !== 0) {
+      throw new Error("Tracked owner-map clear depended on replaced native Map prototype methods");
+    }
+  } finally {
+    if (mapGetDescriptor) Object.defineProperty(Map.prototype, "get", mapGetDescriptor);
+    if (mapHasDescriptor) Object.defineProperty(Map.prototype, "has", mapHasDescriptor);
+    if (mapSetDescriptor) Object.defineProperty(Map.prototype, "set", mapSetDescriptor);
+    if (mapDeleteDescriptor) Object.defineProperty(Map.prototype, "delete", mapDeleteDescriptor);
+    if (mapClearDescriptor) Object.defineProperty(Map.prototype, "clear", mapClearDescriptor);
+    if (mapEntriesDescriptor) Object.defineProperty(Map.prototype, "entries", mapEntriesDescriptor);
+    if (mapForEachDescriptor) Object.defineProperty(Map.prototype, "forEach", mapForEachDescriptor);
+    if (mapSizeDescriptor) Object.defineProperty(Map.prototype, "size", mapSizeDescriptor);
+    if (mapIteratorDescriptor) Object.defineProperty(Map.prototype, Symbol.iterator, mapIteratorDescriptor);
+  }
+
+  grid.dirtyChunks.add("0,0,0");
+  const setHasDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "has");
+  const setAddDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "add");
+  const setDeleteDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "delete");
+  const setClearDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "clear");
+  const setValuesDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "values");
+  const setForEachDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "forEach");
+  const setSizeDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "size");
+  const setIteratorDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, Symbol.iterator);
+  if (!setHasDescriptor || !setAddDescriptor || !setDeleteDescriptor ||
+      !setClearDescriptor || !setValuesDescriptor || !setForEachDescriptor ||
+      !setSizeDescriptor || !setIteratorDescriptor) {
+    throw new Error("Native Set intrinsic descriptors are unavailable for the tampering regression");
+  }
+  try {
+    Object.defineProperty(Set.prototype, "has", {
+      ...setHasDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "add", {
+      ...setAddDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "delete", {
+      ...setDeleteDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "clear", {
+      ...setClearDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "values", {
+      ...setValuesDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "forEach", {
+      ...setForEachDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "size", {
+      ...setSizeDescriptor,
+      get: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, Symbol.iterator, {
+      ...setIteratorDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    if (typeof grid.dirtyChunks.size !== "number" ||
+        typeof grid.dirtyChunks.values().next !== "function" ||
+        typeof grid.dirtyChunks[Symbol.iterator]().next !== "function") {
+      throw new Error("Tracked Set Proxy used a replaced native Set prototype intrinsic");
+    }
+    let setForEachCount = 0;
+    const setForEachResult = grid.dirtyChunks.forEach(() => { setForEachCount++; });
+    if (setForEachResult !== undefined || setForEachCount !== grid.dirtyChunks.size) {
+      throw new Error("Tracked Set Proxy exposed its target through a replaced forEach intrinsic");
+    }
+    if (!grid.dirtyChunks.has("0,0,0") ||
+        !grid.dirtyChunks.delete("0,0,0") ||
+        !grid.dirtyChunks.add("0,0,0").has("0,0,0")) {
+      throw new Error("Tracked Set mutators depended on replaced native Set prototype methods");
+    }
+    grid.dirtyChunks.clear();
+    if (grid.dirtyChunks.size !== 0) {
+      throw new Error("Tracked Set clear depended on replaced native Set prototype methods");
+    }
+  } finally {
+    if (setHasDescriptor) Object.defineProperty(Set.prototype, "has", setHasDescriptor);
+    if (setAddDescriptor) Object.defineProperty(Set.prototype, "add", setAddDescriptor);
+    if (setDeleteDescriptor) Object.defineProperty(Set.prototype, "delete", setDeleteDescriptor);
+    if (setClearDescriptor) Object.defineProperty(Set.prototype, "clear", setClearDescriptor);
+    if (setValuesDescriptor) Object.defineProperty(Set.prototype, "values", setValuesDescriptor);
+    if (setForEachDescriptor) Object.defineProperty(Set.prototype, "forEach", setForEachDescriptor);
+    if (setSizeDescriptor) Object.defineProperty(Set.prototype, "size", setSizeDescriptor);
+    if (setIteratorDescriptor) Object.defineProperty(Set.prototype, Symbol.iterator, setIteratorDescriptor);
+  }
+  grid.dirtyChunks.clear();
+
+  // Object.prototype helpers are inherited by Map/Set too. A polluted
+  // helper bound to the raw target would otherwise become another receiver leak.
+  const objectToStringDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "toString");
+  const objectToLocaleStringDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "toLocaleString");
+  const objectHasOwnPropertyDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "hasOwnProperty");
+  const objectProtoDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, "__proto__");
+  if (!objectToStringDescriptor || !objectToLocaleStringDescriptor ||
+      !objectHasOwnPropertyDescriptor || !objectProtoDescriptor) {
+    throw new Error("Native Object prototype descriptors are unavailable for the tampering regression");
+  }
+  try {
+    Object.defineProperty(Object.prototype, "toString", {
+      ...objectToStringDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Object.prototype, "toLocaleString", {
+      ...objectToLocaleStringDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Object.prototype, "hasOwnProperty", {
+      ...objectHasOwnPropertyDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Object.prototype, "__proto__", {
+      ...objectProtoDescriptor,
+      get: function (this: unknown) { return this; },
+    });
+    if (typeof grid.chunks.toString() !== "string" ||
+        typeof grid.chunks.toLocaleString() !== "string" ||
+        typeof grid.chunks.hasOwnProperty("missing") !== "boolean" ||
+        typeof grid.dirtyChunks.toString() !== "string" ||
+        typeof grid.dirtyChunks.toLocaleString() !== "string" ||
+        typeof grid.dirtyChunks.hasOwnProperty("missing") !== "boolean" ||
+        Reflect.get(grid.chunks, "__proto__") !== Object.getPrototypeOf(grid.chunks) ||
+        Reflect.get(grid.dirtyChunks, "__proto__") !== Object.getPrototypeOf(grid.dirtyChunks)) {
+      throw new Error("Tracked collection Proxy exposed its raw target through a replaced Object prototype helper");
+    }
+  } finally {
+    Object.defineProperty(Object.prototype, "toString", objectToStringDescriptor);
+    Object.defineProperty(Object.prototype, "toLocaleString", objectToLocaleStringDescriptor);
+    Object.defineProperty(Object.prototype, "hasOwnProperty", objectHasOwnPropertyDescriptor);
+    Object.defineProperty(Object.prototype, "__proto__", objectProtoDescriptor);
+  }
+
+  // Chainable tracked mutators must return the public proxy, not their
+  // bound raw target. Otherwise fluent Map.set / Set.add calls leak it.
+  const existingChunk = grid.chunks.get("0,0,0");
+  if (!existingChunk || grid.chunks.set("0,0,0", existingChunk) !== grid.chunks) {
+    throw new Error("Tracked chunks.set did not return the public proxy");
+  }
+  expectRejected("native Map.prototype.set bypass through chunks.set result", () =>
+    Map.prototype.set.call(grid.chunks.set("0,0,0", existingChunk), "1,0,0", new Chunk(1, 0, 0)));
+  const chainedOwners = grid.chunkOwners.set("0,0,0", "owner");
+  if (chainedOwners !== grid.chunkOwners) {
+    throw new Error("Tracked chunkOwners.set did not return the public proxy");
+  }
+  expectRejected("native Map.prototype.set bypass through chunkOwners.set result", () =>
+    Map.prototype.set.call(chainedOwners, "1,0,0", "bypass"));
+  grid.chunkOwners.clear();
+  const chainedDirty = grid.dirtyChunks.add("0,0,0");
+  if (chainedDirty !== grid.dirtyChunks) {
+    throw new Error("Tracked dirtyChunks.add did not return the public proxy");
+  }
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.add result", () =>
+    Set.prototype.add.call(chainedDirty, "1,0,0"));
+  grid.dirtyChunks.clear();
+
+  // Seed each collection so forEach actually invokes its callback. Verify that
+  // the third callback argument is the public proxy, not the raw target.
+  grid.chunkOwners.set("0,0,0", "owner");
+  grid.dirtyChunks.add("0,0,0");
+  const forEachRevision = grid.mutationRevision;
+  expectRejected("native Map.prototype.set bypass through chunkOwners.forEach receiver", () =>
+    grid.chunkOwners.forEach((_owner, _key, collection) =>
+      Map.prototype.set.call(collection, "0,0,0", "bypass")));
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.forEach receiver", () =>
+    grid.dirtyChunks.forEach((_key, _sameKey, collection) =>
+      Set.prototype.add.call(collection, "1,0,0")));
+  if (Number(grid.chunkOwners.size) !== 1 || grid.chunkOwners.get("0,0,0") !== "owner" ||
+      Number(grid.dirtyChunks.size) !== 1 || !grid.dirtyChunks.has("0,0,0") ||
+      grid.mutationRevision !== forEachRevision) {
+    throw new Error("forEach callback exposed a raw tracked collection or changed state");
+  }
+  grid.chunkOwners.clear();
+  grid.dirtyChunks.clear();
+
+  // The guarded proxies must retain normal collection behavior and tracking.
+  const normalOwnerRevision = grid.mutationRevision;
+  grid.chunkOwners.set("0,0,0", "owner");
+  grid.dirtyChunks.add("0,0,0");
+  if (grid.chunkOwners.get("0,0,0") !== "owner" ||
+      !grid.dirtyChunks.has("0,0,0") ||
+      grid.mutationRevision <= normalOwnerRevision) {
+    throw new Error("Guarded tracked collections broke ordinary Map/Set mutation behavior");
+  }
+  grid.chunkOwners.clear();
+  grid.dirtyChunks.clear();
+
   const initialTopology = grid.physicalTopology;
   if (initialTopology !== grid.physicalTopology ||
       initialTopology.chunks.length !== grid.chunks.size ||

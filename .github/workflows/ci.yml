@@ -38,6 +38,9 @@ jobs:
         timeout-minutes: 3
       - run: npm run test:water-surface
       - run: npm run test:infinity-scale-core
+      - name: Run SparseVoxelGrid physical topology and native collection guard regression
+        run: npm run test:sparse-voxel-grid-physical-topology
+        timeout-minutes: 3
       - run: npm run test:sparse-voxel-grid-recovery
       - run: npm run test:causal-graph-recovery
       - run: npm run test:recorder-recovery
