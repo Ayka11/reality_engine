@@ -177,3 +177,32 @@ The latest documentation commit is `cff4a9ad9d214a7e98fb2d2193ffe8a489cc8979`. T
 The runtime hardening evidence referenced above remains separately validated on PR #87 exact head `114296bb6b17e8074bd73e6ad8d04b1c196846dd` by CI #3267 and Dependency Security Audit #228.
 
 The production gate is unchanged: issue #50 remains open; mixed-LOD authoritative topology and adaptive refine/coarsen are not enabled.
+
+
+## Source-level consumer audit — 2026-11-27
+
+The following call-site audit was performed against the current `main` source tree at `1d240d15141e55b2fedf18d427d781409157c732`. It identifies concrete migration points rather than treating every class with “Chunk” in its name as the same storage system.
+
+| Source | Verified current behavior | Mixed-LOD implication |
+|---|---|---|
+| `src/simulation/SimulationEngine.ts` | Constructs and owns `SparseVoxelGrid`; calls `syncDenseToChunks()` after CPU/GPU frame writers; captures/restores the grid as part of core recovery; `reset()` delegates to `grid.clear()`. | This is the orchestration boundary for grid, entity, chemistry, events, recorder and GPU. Topology revision/generation must be coordinated here, and reset must invalidate all old-world ownership. |
+| `src/sculpt/BrushEngine.ts` | Captures full grid snapshots and deltas; discovers brush chunks through `getOrCreateChunk()`; reads `grid.chunks.get()` to preserve chunk metadata; synchronizes dense fields before committing undo/redo. | Brush mutation is both a content writer and a structural chunk creator. It must use a grid-owned mutation transaction and physical-coordinate brush coverage, not write a second topology map. |
+| `src/entity/EntityLayer.ts` | Uses `withMutableBuffers()`, snapshots `grid.buffer` and sparse `backBuffer`, restores them directly on rollback, and validates entity ownership by scanning the dense `ENTITY_ID` field. | Entity IDs are discrete ownership data, not averageable scalar fields. Entity ownership needs an explicit base-cell projection and rollback contract before coarse physical chunks can be authoritative. |
+| `src/simulation/FieldPhysics.ts` | Iterates `W×H×D`, calculates dense linear offsets with `grid.idx()`, and samples six neighbors from the dense back buffer. | The solver is a dense-window LOD0 consumer. It needs a topology-aware execution domain or an explicit dense-window-only guard; it cannot silently treat repeated coarse projections as fine samples. |
+| `src/simulation/TemporalLayer.ts` and `src/simulation/InfoPhysics.ts` | Iterate dense linear buffers and compute neighbor offsets from `W/H/D`. | Both require an explicit policy for coarse-cell time/information evolution and mixed-level neighbor exchange. |
+| `src/simulation/AgentSystem.ts` | Reads/writes dense linear offsets for agent energy, markers and movement; agent positions are integer base-cell coordinates. | Agent occupancy and markers must resolve to base-space ownership; coarse cells cannot receive averaged agent IDs or silently collapse multiple agents. |
+| `src/world/WorldEvents.ts` | Mutates through `grid.cell()` and `grid.cellAt()`, including neighborhood and indexed-cell operations. | These APIs must share the canonical physical resolver, or event operations must be explicitly limited to the dense LOD0 domain. |
+| `src/core/ChunkGrid.ts` | Separate worker grid with numeric packed keys and its own public `chunks`/`dirtyChunks`; pruning removes storage but deliberately publishes dirty tombstones; `clear()` preserves dirty keys so downstream consumers can clear stale payloads. | This is not `SparseVoxelGrid`. Its tombstone semantics must not be copied into `SparseVoxelGrid.clear()`, where reset clears prior-world metadata. Any future bridge needs explicit translation and revision ownership. |
+| `src/ChunkResidencyManager.ts` | Validates hierarchical keys for levels 0–30 and computes residency/distance plans, but exposes no storage publication backend. | Residency planning is not physical topology ownership and cannot authorize a chunk insert or refine/coarsen commit. |
+| `src/core/SparseVoxelGridPhysicalChunkStore.ts` | Provides a detached-copy, whole-map compare-and-swap store with a private map and independent revision; source comment explicitly says it is not wired into `SparseVoxelGrid`. | Useful storage primitive, but its revision is not the grid revision and its successful replacement is not a production world commit. |
+| `src/infinity/ChunkManager.ts`, `src/infinity/WorldFieldChunkStore.ts` | Maintain independent loaded-chunk and world-field caches with their own key types and eviction lifecycle. | These caches are separate consumers/providers, not aliases of the authoritative simulation grid. They require versioned invalidation/acknowledgement rather than direct map sharing. |
+
+### Ordering consequences
+
+1. The first runtime integration must preserve the dense solver's current domain contract. A new physical topology owner cannot be wired in while the CPU solvers still assume one uniform dense lattice.
+2. Migrate the mutation boundary first: `SimulationEngine` + `BrushEngine` must obtain one revision-bound API for structural creation/removal and content deltas. Keep legacy reads temporarily, then make direct structural map mutation unavailable.
+3. Define base-cell ownership and categorical-field policies before migrating `EntityLayer` and `AgentSystem`. Their rollback snapshots and IDs are part of the same world transaction.
+4. Migrate event and physics consumers only after a canonical base-space address and neighbor resolver exist. Do not route them through a lossy dense projection by default.
+5. Keep `ChunkGrid`, `WorldFieldChunkStore`, `ChunkManager`, and the isolated physical store explicitly separate until each has a documented adapter and revision/acknowledgement contract.
+
+This audit is a source inventory, not an implementation claim. It does not make the public grid maps private, change any runtime consumer, or satisfy issue #50. Production adaptive topology changes remain fail-closed.
