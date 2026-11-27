@@ -1389,9 +1389,10 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         boundMethods.set(property, guardedForEach);
         return guardedForEach;
       }
-      // The tracked subclasses install their validated mutators as own,
-      // non-configurable, non-writable bound functions. Proxy invariants
-      // require returning that exact function object rather than rebinding it.
+      // Preserve exact values for any future non-configurable, non-writable
+      // own function properties to satisfy Proxy invariants. Tracked mutators
+      // intentionally live on prototypes so descriptors cannot expose a
+      // bound raw-target function.
       const ownDescriptor = Reflect.getOwnPropertyDescriptor(target, property);
       if (ownDescriptor && ownDescriptor.configurable === false &&
           ownDescriptor.writable === false) return value;
